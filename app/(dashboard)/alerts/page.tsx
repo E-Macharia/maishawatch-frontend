@@ -1,63 +1,255 @@
 "use client";
+
 import Link from "next/link";
-import { useEffect,useMemo,useState } from "react";
-import { AlertTriangle,ArrowUpRight,BellRing,CheckCircle2,CircleAlert,Search,X,Send } from "lucide-react";
-import { Card,CardContent,CardHeader,CardTitle } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowUpRight, BellRing, CheckCircle2, CircleAlert, Search, X, Send } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { Reveal } from "@/components/dashboard/motion";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/dashboard/pagination";
 import { FilterSelect } from "@/components/dashboard/filter-select";
-import { maishawatchData,getFacilityName,getEquipmentName,facilityById,equipmentById } from "@/lib/data";
+import { TableEmptyState } from "@/components/dashboard/table-empty-state";
+import { maishawatchData, getFacilityName, getEquipmentName, facilityById, equipmentById } from "@/lib/data";
 import { AlertResolutionDialog } from "@/components/dashboard/alert-resolution-dialog";
 import { HospitalAlertDialog } from "@/components/dashboard/hospital-alert-dialog";
 
-const PAGE_SIZE=8;
+const PAGE_SIZE = 8;
 
-export default function AlertsPage(){
-  const [severity,setSeverity]=useState("all");
-  const [type,setType]=useState("all");
-  const [query,setQuery]=useState("");
-  const [resolved,setResolved]=useState<string[]>([]);
-  const [page,setPage]=useState(1);
-  const [selected,setSelected]=useState<(typeof maishawatchData.alerts)[number]|null>(null);
-  const [notify,setNotify]=useState<(typeof maishawatchData.alerts)[number]|null>(null);
+export default function AlertsPage() {
+  const [severity, setSeverity] = useState("all");
+  const [type, setType] = useState("all");
+  const [query, setQuery] = useState("");
+  const [resolved, setResolved] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<(typeof maishawatchData.alerts)[number] | null>(null);
+  const [notify, setNotify] = useState<(typeof maishawatchData.alerts)[number] | null>(null);
 
-  useEffect(()=>{try{setResolved(JSON.parse(localStorage.getItem("maisha-resolved-alerts")||"[]"))}catch{}},[]);
-  const filtered=useMemo(()=>maishawatchData.alerts.filter(a=>!resolved.includes(a.id)&&(severity==="all"||a.severity===severity)&&(type==="all"||a.type===type)&&(!query||`${getEquipmentName(a.equipmentId)} ${getFacilityName(a.facilityId)} ${a.message}`.toLowerCase().includes(query.toLowerCase()))),[severity,type,query,resolved]);
-  const pageCount=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
-  const rows=filtered.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
-  const critical=maishawatchData.alerts.filter(x=>x.severity==="critical"&&!resolved.includes(x.id)).length;
-  const discrepancies=maishawatchData.alerts.filter(x=>x.type==="discrepancy"&&!resolved.includes(x.id)).length;
-  const resolve=(id:string)=>{setResolved(x=>Array.from(new Set([...x,id])));setSelected(null);setPage(1);};
+  useEffect(() => {
+    try {
+      setResolved(JSON.parse(localStorage.getItem("maisha-resolved-alerts") || "[]"));
+    } catch {}
+  }, []);
 
-  return <div className="space-y-5">
-    {selected&&<AlertResolutionDialog alert={selected} equipment={equipmentById.get(selected.equipmentId)!} onClose={()=>setSelected(null)} onResolved={resolve}/>}
-    {notify&&<HospitalAlertDialog alert={notify} equipment={equipmentById.get(notify.equipmentId)!} facility={facilityById.get(notify.facilityId)!} onClose={()=>setNotify(null)}/>}
-    <Reveal><div><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-red-300">Operational signals</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Alerts</h1><p className="mt-2 text-sm text-slate-500">Turn risk signals into a verified maintenance and hospital-notification workflow.</p></div></Reveal>
-    <section className="grid gap-3 sm:grid-cols-3">
-      <MetricCard label="Open alerts" value={maishawatchData.alerts.length-resolved.length} hint="Signals requiring review" icon={BellRing} tone="amber"/>
-      <MetricCard label="Critical" value={critical} hint="Highest urgency" icon={AlertTriangle} tone="red"/>
-      <MetricCard label="Discrepancies" value={discrepancies} hint="Usage reconciliation" icon={CircleAlert} tone="blue"/>
-    </section>
-    <Reveal delay={.08}><Card className="border-white/[0.07] bg-white/[0.025] ring-0">
-      <CardHeader className="border-b border-white/[0.06] pb-4"><div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div><CardTitle className="text-sm font-semibold text-white">Signal queue</CardTitle><p className="mt-1 text-[13px] text-slate-500">{filtered.length} open signals match the current view.</p></div>
-        <div className="flex flex-wrap gap-2">
-          <div className="relative"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-600"/><input value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}} placeholder="Search alert, asset, facility..." className="h-9 w-64 rounded-[5px] border border-white/[0.08] bg-black/10 pl-9 pr-8 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-blue-400/30"/>{query&&<button onClick={()=>{setQuery("");setPage(1)}} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600"><X className="h-3.5 w-3.5"/></button>}</div>
-          <FilterSelect value={severity} onChange={v=>{setSeverity(v);setPage(1)}} options={[{value:"all",label:"All severity"},{value:"critical",label:"Critical"},{value:"high",label:"High"},{value:"medium",label:"Moderate"},{value:"low",label:"Low"}]}/>
-          <FilterSelect value={type} onChange={v=>{setType(v);setPage(1)}} options={[{value:"all",label:"All types"},{value:"risk",label:"Risk"},{value:"discrepancy",label:"Discrepancy"}]}/>
+  const filtered = useMemo(
+    () =>
+      maishawatchData.alerts.filter(
+        (a) =>
+          !resolved.includes(a.id) &&
+          (severity === "all" || a.severity === severity) &&
+          (type === "all" || a.type === type) &&
+          (!query ||
+            `${getEquipmentName(a.equipmentId)} ${getFacilityName(a.facilityId)} ${a.message}`
+              .toLowerCase()
+              .includes(query.toLowerCase()))
+      ),
+    [severity, type, query, resolved]
+  );
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const critical = maishawatchData.alerts.filter((x) => x.severity === "critical" && !resolved.includes(x.id)).length;
+  const discrepancies = maishawatchData.alerts.filter((x) => x.type === "discrepancy" && !resolved.includes(x.id)).length;
+
+  const resolve = (id: string) => {
+    setResolved((x) => Array.from(new Set([...x, id])));
+    setSelected(null);
+    setPage(1);
+  };
+
+  const reset = () => {
+    setQuery("");
+    setSeverity("all");
+    setType("all");
+    setPage(1);
+  };
+
+  return (
+    <div className="space-y-6">
+      {selected && (
+        <AlertResolutionDialog
+          alert={selected}
+          equipment={equipmentById.get(selected.equipmentId)!}
+          onClose={() => setSelected(null)}
+          onResolved={resolve}
+        />
+      )}
+      {notify && (
+        <HospitalAlertDialog
+          alert={notify}
+          equipment={equipmentById.get(notify.equipmentId)!}
+          facility={facilityById.get(notify.facilityId)!}
+          onClose={() => setNotify(null)}
+        />
+      )}
+
+      {/* Header Banner */}
+      <Reveal>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-red-500">Operational Signals</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Alert Centre</h1>
+          <p className="mt-1 max-w-2xl text-xs sm:text-sm text-muted-foreground">
+            Turn risk signals into verified biomedical maintenance actions and auditable hospital notifications.
+          </p>
         </div>
-      </div></CardHeader>
-      <CardContent className="p-0">
-        <div className="divide-y divide-white/[0.05]">{rows.map(alert=><div key={alert.id} className="flex flex-col gap-4 p-5 transition hover:bg-white/[0.02] lg:flex-row lg:items-center">
-          <div className="flex min-w-0 flex-1 items-start gap-3"><div className={alert.severity==="critical"?"flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-red-400/10 text-red-300":"flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-amber-400/10 text-amber-300"}>{alert.type==="risk"?<AlertTriangle className="h-4 w-4"/>:<CircleAlert className="h-4 w-4"/>}</div>
-            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="text-[13px] font-semibold text-slate-200">{getEquipmentName(alert.equipmentId)}</p><span className="rounded-[5px] border border-white/[0.06] px-1.5 py-0.5 text-[8px] uppercase tracking-[0.14em] text-slate-600">{alert.type}</span></div><p className="mt-1 text-[11px] leading-5 text-slate-500">{alert.message}</p><p className="mt-2 text-[10px] text-slate-700">{getFacilityName(alert.facilityId)} · {new Date(alert.createdAt).toLocaleString("en-KE",{dateStyle:"medium",timeStyle:"short"})}</p></div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 lg:shrink-0"><StatusBadge level={alert.severity}/><Link href={`/equipment/${alert.equipmentId}`} className="inline-flex h-8 items-center gap-1.5 rounded-[5px] border border-white/[0.07] px-2.5 text-[10px] font-semibold text-slate-400 hover:bg-white/[0.05] hover:text-white">Inspect <ArrowUpRight className="h-3 w-3"/></Link><button onClick={()=>setNotify(alert)} className="inline-flex h-8 items-center gap-1.5 rounded-[5px] border border-blue-400/15 bg-blue-400/[0.04] px-2.5 text-[10px] font-semibold text-blue-200 hover:bg-blue-400/[0.08]"><Send className="h-3 w-3"/> Notify</button><button onClick={()=>setSelected(alert)} className="inline-flex h-8 items-center gap-1.5 rounded-[5px] bg-white px-2.5 text-[10px] font-semibold text-slate-950 hover:bg-slate-200"><CheckCircle2 className="h-3 w-3"/> Resolve</button></div>
-        </div>)}{rows.length===0&&<div className="py-20 text-center"><CheckCircle2 className="mx-auto h-7 w-7 text-emerald-300"/><p className="mt-3 text-sm font-semibold text-slate-300">Queue cleared</p><p className="mt-1 text-xs text-slate-600">No open signals match these filters.</p></div>}</div>
-        <Pagination page={page} pageCount={pageCount} onPageChange={setPage} pageSize={PAGE_SIZE} total={filtered.length}/>
-      </CardContent>
-    </Card></Reveal>
-  </div>;
+      </Reveal>
+
+      {/* KPI Cards */}
+      <section className="grid gap-4 sm:grid-cols-3">
+        <MetricCard
+          label="Open Alerts"
+          value={maishawatchData.alerts.length - resolved.length}
+          hint="Signals requiring intervention"
+          icon={BellRing}
+          tone="amber"
+        />
+        <MetricCard label="Critical Urgency" value={critical} hint="Shortest predicted failure lead times" icon={AlertTriangle} tone="red" />
+        <MetricCard label="Usage Discrepancies" value={discrepancies} hint="Counter vs register mismatch" icon={CircleAlert} tone="blue" />
+      </section>
+
+      {/* Signal Queue Card */}
+      <Reveal delay={0.08}>
+        <Card className="border-border bg-card shadow-xs">
+          <CardHeader className="border-b border-border pb-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <CardTitle className="text-sm font-bold text-foreground">Signal Queue</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">{filtered.length} open signals match the current view.</p>
+              </div>
+
+              {/* Filter Toolbar */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    value={query}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Search alert, asset, facility..."
+                    className="h-9 w-64 rounded-lg border border-border bg-background pl-9 pr-8 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all shadow-xs"
+                  />
+                  {query && (
+                    <button
+                      onClick={() => {
+                        setQuery("");
+                        setPage(1);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <FilterSelect
+                  value={severity}
+                  onChange={(v) => {
+                    setSeverity(v);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "all", label: "All Severity" },
+                    { value: "critical", label: "Critical" },
+                    { value: "high", label: "High" },
+                    { value: "medium", label: "Moderate" },
+                    { value: "low", label: "Low" },
+                  ]}
+                />
+
+                <FilterSelect
+                  value={type}
+                  onChange={(v) => {
+                    setType(v);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "all", label: "All Types" },
+                    { value: "risk", label: "Risk" },
+                    { value: "discrepancy", label: "Discrepancy" },
+                  ]}
+                />
+
+                <button
+                  onClick={reset}
+                  className="h-9 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shadow-xs"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            <div className="divide-y divide-border">
+              {rows.map((alert) => (
+                <div key={alert.id} className="flex flex-col gap-4 p-5 transition-colors hover:bg-accent/40 lg:flex-row lg:items-center">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
+                        alert.severity === "critical"
+                          ? "bg-red-500/10 text-red-500 border-red-500/20"
+                          : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                      }`}
+                    >
+                      {alert.type === "risk" ? <AlertTriangle className="h-4 w-4" /> : <CircleAlert className="h-4 w-4" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xs font-bold text-foreground">{getEquipmentName(alert.equipmentId)}</p>
+                        <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                          {alert.type}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{alert.message}</p>
+                      <p className="mt-1.5 text-[11px] font-medium text-muted-foreground/80">
+                        {getFacilityName(alert.facilityId)} •{" "}
+                        {new Date(alert.createdAt).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" })}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+                    <StatusBadge level={alert.severity} />
+                    <Link
+                      href={`/equipment/${alert.equipmentId}`}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shadow-xs"
+                    >
+                      Inspect <ArrowUpRight className="h-3 w-3" />
+                    </Link>
+                    <button
+                      onClick={() => setNotify(alert)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-3 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors shadow-xs cursor-pointer"
+                    >
+                      <Send className="h-3 w-3" /> Notify
+                    </button>
+                    <button
+                      onClick={() => setSelected(alert)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 text-xs font-semibold hover:bg-primary/90 transition-all shadow-xs cursor-pointer"
+                    >
+                      <CheckCircle2 className="h-3 w-3" /> Resolve
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {rows.length === 0 && (
+                <TableEmptyState
+                  title="No open signals match filters"
+                  description="All alerts in this view have been resolved or filtered out."
+                  onReset={reset}
+                />
+              )}
+            </div>
+
+            {filtered.length > 0 && (
+              <Pagination page={page} pageCount={pageCount} onPageChange={setPage} pageSize={PAGE_SIZE} total={filtered.length} />
+            )}
+          </CardContent>
+        </Card>
+      </Reveal>
+    </div>
+  );
 }
