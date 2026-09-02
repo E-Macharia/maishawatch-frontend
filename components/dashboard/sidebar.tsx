@@ -36,7 +36,7 @@ export default function Sidebar({ navGroups, user: _user }: { navGroups: NavGrou
                 {isActive && <span className="absolute bottom-2 left-0 top-2 w-0.5 rounded-r-[5px] bg-gradient-to-b from-blue-300 to-cyan-300"/>}
                 <Icon className={cn("h-4 w-4 shrink-0", isActive?"text-blue-300":"text-slate-500 group-hover:text-slate-300")}/>
                 {!isCollapsed && <span className="flex-1 truncate">{item.title}</span>}
-                {badge!==undefined&&!isCollapsed&&<span className="min-w-6 rounded-[5px] border border-white/[0.06] bg-white/[0.025] px-1.5 py-0.5 text-center text-[11px] font-semibold text-slate-500">{badge>99?"99+":badge}</span>}
+                {badge!==undefined&&!isCollapsed&&<span className="min-w-6 rounded-[5px] border border-white/[0.06] bg-white/[0.025] px-1.5 py-0.5 text-center text-[11px] font-semibold text-slate-500">{typeof badge === "number" && badge > 99 ? "99+" : badge}</span>}
               </Link>;
             })}
           </div>
