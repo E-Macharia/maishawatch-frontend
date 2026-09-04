@@ -1,0 +1,2 @@
+import { NextResponse } from "next/server"; import { maishawatchData } from "@/lib/data";
+export async function GET(request:Request){const {searchParams}=new URL(request.url); const severity=searchParams.get("severity"); const type=searchParams.get("type"); const items=maishawatchData.alerts.filter(a=>(!severity||a.severity===severity)&&(!type||a.type===type)); return NextResponse.json({meta:{count:items.length},data:items});}

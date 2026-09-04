@@ -1,0 +1,2 @@
+import { NextResponse } from "next/server"; import { maishawatchData } from "@/lib/data";
+export async function GET(request:Request){const {searchParams}=new URL(request.url); const equipmentId=searchParams.get("equipmentId"); const records=maishawatchData.equipment.flatMap(e=>(equipmentId&&e.id!==equipmentId?[]:e.failureEvents.map(f=>({...f,equipmentId:e.id,equipmentName:e.name,facilityId:e.facilityId})))); return NextResponse.json({meta:{count:records.length},data:records});}

@@ -1,0 +1,2 @@
+import { NextResponse } from "next/server"; import { getFacilityRiskRanking } from "@/lib/data/metrics";
+export async function GET(request:Request){const {searchParams}=new URL(request.url); const q=(searchParams.get("q")??"").toLowerCase(); const county=(searchParams.get("county")??"").toLowerCase(); const items=getFacilityRiskRanking().filter(f=>(!q||`${f.name} ${f.county} ${f.subCounty??""} ${f.ward??""}`.toLowerCase().includes(q))&&(!county||f.county.toLowerCase()===county)); return NextResponse.json({meta:{count:items.length},data:items});}
