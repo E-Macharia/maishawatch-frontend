@@ -1,6 +1,22 @@
 # MaishaWatch Frontend
 
-MaishaWatch is the frontend for the medical equipment utilization and maintenance risk-monitoring platform for Kenyan hospitals.
+[![Live Frontend](https://img.shields.io/badge/Live%20Frontend-Vercel-black?style=for-the-badge&logo=vercel)](https://maishawatch-frontend.vercel.app/)
+[![Backend API](https://img.shields.io/badge/Backend%20API-Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://maishawatch-backend.onrender.com/docs)
+
+> 🌐 **Live Web Application:** [https://maishawatch-frontend.vercel.app/](https://maishawatch-frontend.vercel.app/)  
+> ⚡ **Live Backend API (Swagger UI):** [https://maishawatch-backend.onrender.com/docs](https://maishawatch-backend.onrender.com/docs)
+
+---
+
+## About MaishaWatch
+
+**MaishaWatch** is an intelligent medical equipment utilization, predictive maintenance, and risk-monitoring platform designed for Kenyan healthcare facilities across all 47 counties.
+
+Key capabilities include:
+- **Predictive AI / RUL Estimation**: Continuous remaining useful life forecasting and degradation tracking.
+- **Utilization & Discrepancy Auditing**: Automated reconciliation between counter telemetry and register usage logs.
+- **Hotspot & Capacity Analysis**: Facility-tier equipment eligibility and county-wide operational visibility.
+- **Dual Operating Modes**: Operates with a live FastAPI backend service or a high-fidelity standalone snapshot dataset.
 
 This repository is designed to work **even when the backend team does not expose an HTTP API**. The frontend consumes a normalized snapshot generated directly from the backend team's real project datasets and exposes that snapshot through Next.js API routes for a clean application boundary.
 

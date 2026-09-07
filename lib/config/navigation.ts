@@ -16,6 +16,7 @@ export const defaultNavGroups: NavGroup[] = [
 			},
 			{ title: "Reports", href: "/reports", iconName: "FileText" },
 			{ title: "National", href: "/national", iconName: "Globe" },
+			{ title: "About", href: "/about", iconName: "Info" },
 		],
 	},
 ];

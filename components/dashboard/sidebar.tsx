@@ -16,6 +16,7 @@ import {
 	ShieldCheck,
 	Globe,
 	Brain,
+	Info,
 } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
 import { NavGroup, UserProfile } from "@/types/navigation";
@@ -30,6 +31,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 	FileText,
 	Globe,
 	Brain,
+	Info,
 };
 
 export default function Sidebar({
