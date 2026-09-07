@@ -193,12 +193,12 @@ export default function Sidebar({
 												Guest Mode
 											</span>
 										</div>
-										<button
-											onClick={openLoginModal}
+										<Link
+											href="/login"
 											className="text-[11px] font-bold text-primary hover:underline"
 										>
 											Sign In
-										</button>
+										</Link>
 									</div>
 									<p className="text-[10px] leading-relaxed text-muted-foreground">
 										Log in as admin to unlock full write and management rights.

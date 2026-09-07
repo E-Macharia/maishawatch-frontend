@@ -12,8 +12,10 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import Link from "next/link";
+
 export function AdminUserMenu() {
-  const { user, isAuthenticated, isAdmin, openLoginModal, logout } = useAuth();
+  const { user, isAuthenticated, isAdmin, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -30,14 +32,14 @@ export function AdminUserMenu() {
 
   if (!isAuthenticated) {
     return (
-      <button
-        onClick={openLoginModal}
+      <Link
+        href="/login"
         className="inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors shadow-2xs"
       >
         <Lock className="h-3.5 w-3.5" />
         <span className="hidden sm:inline">Admin Sign In</span>
         <span className="sm:hidden">Login</span>
-      </button>
+      </Link>
     );
   }
 
@@ -92,6 +94,7 @@ export function AdminUserMenu() {
               onClick={() => {
                 logout();
                 setDropdownOpen(false);
+                window.location.href = "/login";
               }}
               className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors"
             >
