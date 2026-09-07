@@ -3,6 +3,8 @@ import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ChatbotDrawer } from "@/components/chat/chatbot-drawer";
+import { AuthProvider } from "@/lib/auth/auth-context";
+import { AdminLoginModal } from "@/components/auth/admin-login-modal";
 
 const plusJakartaSans = Plus_Jakarta_Sans({ variable: "--font-sans", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 const jetbrainsMono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"], weight: ["400", "500"] });
@@ -17,8 +19,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} h-full antialiased`}>
       <body>
         <ThemeProvider>
-          {children}
-          <ChatbotDrawer />
+          <AuthProvider>
+            {children}
+            <AdminLoginModal />
+            <ChatbotDrawer />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

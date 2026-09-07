@@ -22,6 +22,7 @@ import { useSidebar } from "./sidebar-context";
 import { NavGroup, UserProfile } from "@/types/navigation";
 import { cn } from "@/lib/utils";
 import { maishawatchData } from "@/lib/data";
+import { useAuth } from "@/lib/auth/auth-context";
 
 const ICON_MAP: Record<string, LucideIcon> = {
 	LayoutDashboard,
@@ -44,6 +45,7 @@ export default function Sidebar({
 	const pathname = usePathname();
 	const { isCollapsed, isMobileOpen, toggleSidebar, closeMobileSidebar } =
 		useSidebar();
+	const { user: authUser, isAuthenticated, openLoginModal } = useAuth();
 	const alertCount = maishawatchData.alerts.length;
 
 	return (
@@ -163,28 +165,61 @@ export default function Sidebar({
 					))}
 				</div>
 
-				{/* Monitoring Active Footer Card */}
+				{/* Monitoring / Auth Active Footer Card */}
 				<div className="border-t border-sidebar-border px-3 py-4">
 					{!isCollapsed ? (
-						<div className="rounded-xl border border-sidebar-border bg-sidebar-accent/40 p-3.5 shadow-xs">
-							<div className="flex items-center gap-2">
-								<ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
-								<span className="text-xs font-bold text-sidebar-foreground">
-									Monitoring Active
-								</span>
-							</div>
-							<p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-								Network risk signals actively monitored across hospital scope.
-							</p>
+						<div className="rounded-xl border border-sidebar-border bg-sidebar-accent/40 p-3.5 shadow-xs space-y-1.5">
+							{isAuthenticated ? (
+								<>
+									<div className="flex items-center gap-2">
+										<ShieldCheck className="h-4 w-4 text-blue-500 shrink-0" />
+										<span className="text-xs font-bold text-sidebar-foreground">
+											Admin Active
+										</span>
+									</div>
+									<p className="text-[11px] leading-snug text-muted-foreground truncate font-medium">
+										{authUser?.name || "System Admin"}
+									</p>
+									<span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-600 dark:text-blue-400">
+										National Scope
+									</span>
+								</>
+							) : (
+								<>
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-2">
+											<ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+											<span className="text-xs font-bold text-sidebar-foreground">
+												Guest Mode
+											</span>
+										</div>
+										<button
+											onClick={openLoginModal}
+											className="text-[11px] font-bold text-primary hover:underline"
+										>
+											Sign In
+										</button>
+									</div>
+									<p className="text-[10px] leading-relaxed text-muted-foreground">
+										Log in as admin to unlock full write and management rights.
+									</p>
+								</>
+							)}
 						</div>
 					) : (
 						<div className="flex justify-center">
-							<div
-								title="Monitoring active"
-								className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-500"
+							<button
+								onClick={isAuthenticated ? undefined : openLoginModal}
+								title={isAuthenticated ? "Admin active" : "Sign in as Admin"}
+								className={cn(
+									"flex h-9 w-9 items-center justify-center rounded-xl border transition-colors",
+									isAuthenticated
+										? "border-blue-500/20 bg-blue-500/10 text-blue-500"
+										: "border-sidebar-border bg-sidebar-accent/40 text-muted-foreground hover:text-foreground"
+								)}
 							>
 								<ShieldCheck className="h-4 w-4" />
-							</div>
+							</button>
 						</div>
 					)}
 				</div>

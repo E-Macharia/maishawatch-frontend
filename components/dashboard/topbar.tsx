@@ -8,6 +8,7 @@ import { useSidebar } from "./sidebar-context";
 import { maishawatchData } from "@/lib/data";
 import { NotificationsPopover } from "./notifications-popover";
 import { ThemeToggle } from "./theme-toggle";
+import { AdminUserMenu } from "@/components/auth/admin-user-menu";
 
 export default function Topbar() {
   const pathname = usePathname();
@@ -222,6 +223,7 @@ export default function Topbar() {
           </div>
         )}
 
+        <AdminUserMenu />
         <ThemeToggle />
         <NotificationsPopover />
 

@@ -10,10 +10,24 @@ import { maishawatchData } from "@/lib/data";
 const API_BASE = (
   process.env.BACKEND_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "http://127.0.0.1:8000/api/v1"
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "https://maishawatch-backend.onrender.com"
 ).replace(/\/$/, "");
 
 const DATA_SOURCE = process.env.DATA_SOURCE ?? "fixture";
+
+export function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("maishawatch_access_token");
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+  return headers;
+}
 
 async function fetchWithFallback<T>(url: string, fallbackValue: () => T): Promise<T> {
   if (DATA_SOURCE !== "remote") {
@@ -26,6 +40,7 @@ async function fetchWithFallback<T>(url: string, fallbackValue: () => T): Promis
 
     const res = await fetch(url, {
       cache: "no-store",
+      headers: getAuthHeaders(),
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -186,7 +201,7 @@ export async function submitMaintenanceRecord(payload: {
 }): Promise<{ status: string; message: string; data: MaintenanceRecord }> {
   const res = await fetch(`${API_BASE}/maintenance`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify(payload),
   });
 
@@ -206,7 +221,7 @@ export async function acknowledgeAlert(
 ): Promise<{ status: string; message: string }> {
   const res = await fetch(`${API_BASE}/alerts/${alertId}/acknowledge`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ acknowledgedBy, notes }),
   });
 
@@ -229,7 +244,7 @@ export async function predictEquipmentRul(payload: {
 }): Promise<any> {
   const res = await fetch(`${API_BASE}/predict/rul`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify(payload),
   });
 
