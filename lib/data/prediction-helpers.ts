@@ -49,8 +49,7 @@ export function getPredictionView(equipment: Equipment): PredictionView {
     Math.round(
       equipment.mlRulHours ??
         equipment.rulHours ??
-        equipment.leadTimeDays * 24 ??
-        0,
+        (equipment.leadTimeDays != null ? equipment.leadTimeDays * 24 : 0),
     ),
   );
   const rulDays = Math.max(0, Math.round(rulHours / 24));

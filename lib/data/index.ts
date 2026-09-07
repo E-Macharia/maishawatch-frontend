@@ -1,7 +1,7 @@
 import dataset from "@/lib/data/generated/dataset.json";
 import type { MaishaWatchDataset } from "@/types/maishawatch";
 
-export const maishawatchData = dataset as MaishaWatchDataset;
+export const maishawatchData = dataset as unknown as MaishaWatchDataset;
 
 export const facilityById = new Map(
   maishawatchData.facilities.map((facility) => [facility.id, facility]),
