@@ -1,284 +1,529 @@
-import type {
-  Equipment,
-  Facility,
-  Alert,
-  MaintenanceRecord,
-  MaishaWatchDataset,
-} from "@/types/maishawatch";
-import { maishawatchData } from "@/lib/data";
+import type { Equipment, Facility, Alert } from "@/types/maishawatch";
 
 const API_BASE = (
-  process.env.BACKEND_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "https://maishawatch-backend.onrender.com"
+	process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL ||
+	process.env.NEXT_PUBLIC_BACKEND_URL ||
+	process.env.NEXT_PUBLIC_API_BASE_URL ||
+	process.env.BACKEND_API_BASE_URL ||
+	// For development, use localhost first
+	(process.env.NODE_ENV === "development" ? "http://127.0.0.1:8000" : null) ||
+	"https://maishawatch-backend.onrender.com"
 ).replace(/\/$/, "");
 
-const DATA_SOURCE = process.env.DATA_SOURCE ?? "fixture";
+const TOKEN_KEY = "maishawatch_access_token";
 
 export function getAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("maishawatch_access_token");
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-  }
-  return headers;
+	const headers: Record<string, string> = {
+		Accept: "application/json",
+		"Content-Type": "application/json",
+	};
+	if (typeof window !== "undefined") {
+		const token = localStorage.getItem(TOKEN_KEY);
+		if (token) headers.Authorization = `Bearer ${token}`;
+	}
+	return headers;
 }
 
-async function fetchWithFallback<T>(url: string, fallbackValue: () => T): Promise<T> {
-  if (DATA_SOURCE !== "remote") {
-    return fallbackValue();
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4-second timeout
-
-    const res = await fetch(url, {
-      cache: "no-store",
-      headers: getAuthHeaders(),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      console.warn(`[Backend API] Request to ${url} returned ${res.status}. Falling back to snapshot.`);
-      return fallbackValue();
-    }
-    const json = await res.json();
-    return (json.data !== undefined ? json.data : json) as T;
-  } catch (error) {
-    console.warn(`[Backend API] Failed to connect to ${url}. Using local snapshot fallback.`);
-    return fallbackValue();
-  }
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), 15000);
+	try {
+		const response = await fetch(`${API_BASE}${path}`, {
+			...init,
+			cache: "no-store",
+			headers: { ...getAuthHeaders(), ...(init.headers || {}) },
+			signal: controller.signal,
+		});
+		const text = await response.text();
+		let payload: unknown = null;
+		try {
+			payload = text ? JSON.parse(text) : null;
+		} catch {
+			payload = text;
+		}
+		if (!response.ok) {
+			const detail =
+				typeof payload === "object" && payload && "detail" in payload
+					? String((payload as { detail: unknown }).detail)
+					: response.statusText;
+			throw new Error(`${response.status}: ${detail}`);
+		}
+		return payload as T;
+	} finally {
+		clearTimeout(timeout);
+	}
 }
 
-/**
- * Fetch equipment list with optional search, county, and risk filters
- */
+const qs = (
+	params: Record<string, string | number | boolean | undefined | null>,
+) => {
+	const query = new URLSearchParams();
+	Object.entries(params).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "")
+			query.set(key, String(value));
+	});
+	const value = query.toString();
+	return value ? `?${value}` : "";
+};
+
+export const api = {
+	health: () =>
+		request<{ status: string; service: string; version: string }>("/health"),
+
+	auth: {
+		login: (email: string, password: string) =>
+			request<any>("/auth/login", {
+				method: "POST",
+				body: JSON.stringify({ email, password }),
+			}),
+		token: (username: string, password: string) => {
+			const body = new URLSearchParams({ username, password });
+			return request<any>("/auth/token", {
+				method: "POST",
+				headers: { "Content-Type": "application/x-www-form-urlencoded" },
+				body: body.toString(),
+			});
+		},
+		verifyOtp: (email: string, otp: string) =>
+			request<any>("/auth/verify-otp", {
+				method: "POST",
+				body: JSON.stringify({ email, otp }),
+			}),
+		changeTempPassword: (payload: {
+			email: string;
+			temp_password: string;
+			new_password: string;
+			confirm_password: string;
+		}) =>
+			request<any>("/auth/change-temp-password", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		forgotPassword: (email: string) =>
+			request<any>("/auth/forgot-password", {
+				method: "POST",
+				body: JSON.stringify({ email }),
+			}),
+		resetPassword: (payload: {
+			email: string;
+			otp: string;
+			new_password: string;
+			confirm_password: string;
+		}) =>
+			request<any>("/auth/reset-password", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		changePassword: (payload: {
+			current_password: string;
+			new_password: string;
+			confirm_password: string;
+		}) =>
+			request<any>("/auth/change-password", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		me: () => request<any>("/auth/me"),
+		logout: () => request<any>("/auth/logout", { method: "POST" }),
+	},
+
+	dashboard: { summary: () => request<any>("/dashboard/summary") },
+
+	equipment: {
+		list: (
+			params: {
+				facility_id?: string;
+				equipment_type?: string;
+				status?: string;
+				search?: string;
+			} = {},
+		) => request<any[]>(`/equipment${qs(params)}`),
+		detail: (
+			id: string,
+			params: {
+				include_telemetry?: boolean;
+				include_maintenance?: boolean;
+				include_alerts?: boolean;
+				limit?: number;
+			} = {},
+		) => request<any>(`/equipment/${encodeURIComponent(id)}${qs(params)}`),
+		create: (payload: {
+			equipment_id: string;
+			facility_id: string;
+			equipment_type: string;
+			manufacturer?: string;
+			model?: string;
+			serial_number?: string;
+			installation_date?: string;
+			simulate_telemetry?: boolean;
+			telemetry_interval_seconds?: number;
+		}) =>
+			request<any>("/equipment", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		update: (id: string, payload: Record<string, unknown>) =>
+			request<any>(`/equipment/${encodeURIComponent(id)}`, {
+				method: "PUT",
+				body: JSON.stringify(payload),
+			}),
+		patch: (id: string, payload: Record<string, unknown>) =>
+			request<any>(`/equipment/${encodeURIComponent(id)}`, {
+				method: "PATCH",
+				body: JSON.stringify(payload),
+			}),
+		updateStatus: (id: string, status: string) =>
+			request<any>(`/equipment/${encodeURIComponent(id)}/status`, {
+				method: "PATCH",
+				body: JSON.stringify({ status }),
+			}),
+		remove: (id: string, permanent = false) =>
+			request<any>(`/equipment/${encodeURIComponent(id)}${qs({ permanent })}`, {
+				method: "DELETE",
+			}),
+		syncAll: () => request<any>("/equipment/sync-all", { method: "POST" }),
+		syncData: () => request<any>("/equipment/sync-data", { method: "POST" }),
+		generateTelemetry: (id: string, count = 100) =>
+			request<any>(
+				`/equipment/${encodeURIComponent(id)}/generate-telemetry${qs({ count })}`,
+				{ method: "POST" },
+			),
+		failurePrediction: (id: string) =>
+			request<any>(`/equipment/${encodeURIComponent(id)}/failure-prediction`),
+		rul: (id: string) => request<any>(`/equipment/${encodeURIComponent(id)}/rul`),
+		evaluate: (equipment_id: string) =>
+			request<any>("/equipment/evaluate", {
+				method: "POST",
+				body: JSON.stringify({ equipment_id }),
+			}),
+		simulateBatch: (payload: {
+			equipment_id: string;
+			facility_id: string;
+			count?: number;
+		}) =>
+			request<any>("/equipment/simulate-batch", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		stats: (facility_id?: string) =>
+			request<any>(`/equipment/stats/summary${qs({ facility_id })}`),
+		telemetry: (
+			id: string,
+			params: { facility_id?: string; limit?: number; days?: number } = {},
+		) =>
+			request<any[]>(
+				`/equipment/${encodeURIComponent(id)}/telemetry${qs(params)}`,
+			),
+		alerts: (id: string, params: { limit?: number; status?: string } = {}) =>
+			request<any[]>(`/equipment/${encodeURIComponent(id)}/alerts${qs(params)}`),
+	},
+
+	facilities: {
+		list: (
+			params: {
+				name?: string;
+				county?: string;
+				equipment_type?: string;
+				status?: string;
+				keph_level?: string;
+			} = {},
+		) => request<any[]>(`/facilities${qs(params)}`),
+		create: (payload: {
+			facility_id: string;
+			facility_name: string;
+			county: string;
+			keph_level?: string;
+			status?: string;
+		}) =>
+			request<any>("/facilities", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+	},
+
+	maintenance: {
+		list: () => request<any[]>("/maintenance"),
+		history: (equipmentId: string) =>
+			request<any[]>(`/maintenance/history/${encodeURIComponent(equipmentId)}`),
+		createWorkOrder: (payload: {
+			equipment_id: string;
+			priority?: string;
+			title: string;
+			description?: string;
+			assigned_to?: string;
+			scheduled_at?: string;
+		}) =>
+			request<any>("/maintenance/work-orders", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		updateWorkOrder: (id: string, payload: Record<string, unknown>) =>
+			request<any>(`/maintenance/work-orders/${encodeURIComponent(id)}`, {
+				method: "PATCH",
+				body: JSON.stringify(payload),
+			}),
+	},
+
+	alerts: {
+		list: (
+			params: {
+				status?: string;
+				severity?: string;
+				source?: string;
+				facility_id?: string;
+				equipment_id?: string;
+				limit?: number;
+				offset?: number;
+			} = {},
+		) => request<any>(`/alerts${qs(params)}`),
+		stats: (params: { facility_id?: string; days?: number } = {}) =>
+			request<any>(`/alerts/stats${qs(params)}`),
+		byEquipment: (id: string, limit = 100) =>
+			request<any[]>(
+				`/alerts/equipment/${encodeURIComponent(id)}${qs({ limit })}`,
+			),
+		get: (id: string) => request<any>(`/alerts/${encodeURIComponent(id)}`),
+		create: (payload: Record<string, unknown>) =>
+			request<any>("/alerts", { method: "POST", body: JSON.stringify(payload) }),
+		replace: (id: string, payload: Record<string, unknown>) =>
+			request<any>(`/alerts/${encodeURIComponent(id)}`, {
+				method: "PUT",
+				body: JSON.stringify(payload),
+			}),
+		patch: (id: string, payload: Record<string, unknown>) =>
+			request<any>(`/alerts/${encodeURIComponent(id)}`, {
+				method: "PATCH",
+				body: JSON.stringify(payload),
+			}),
+		acknowledge: (id: string) =>
+			request<any>(`/alerts/${encodeURIComponent(id)}/acknowledge`, {
+				method: "PATCH",
+			}),
+		resolve: (id: string) =>
+			request<any>(`/alerts/${encodeURIComponent(id)}/resolve`, {
+				method: "PATCH",
+			}),
+		close: (id: string) =>
+			request<any>(`/alerts/${encodeURIComponent(id)}/close`, { method: "PATCH" }),
+		bulk: (payload: Record<string, unknown>) =>
+			request<any>("/alerts/bulk", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		remove: (id: string) =>
+			request<any>(`/alerts/${encodeURIComponent(id)}`, { method: "DELETE" }),
+		bulkRemove: (ids: string[]) => {
+			const q = new URLSearchParams();
+			ids.forEach((id) => q.append("alert_ids", id));
+			return request<any>(`/alerts/bulk?${q.toString()}`, { method: "DELETE" });
+		},
+		resolvedCount: (params: { facility_id?: string; days?: number } = {}) =>
+			request<any>(`/alerts/resolved/count${qs(params)}`),
+	},
+
+	predictions: {
+		failure24h: (payload: Record<string, unknown>) =>
+			request<any>("/predict/failure/24h", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		failure72h: (payload: Record<string, unknown>) =>
+			request<any>("/predict/failure/72h", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		failure168h: (payload: Record<string, unknown>) =>
+			request<any>("/predict/failure/168h", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		failureAll: (payload: Record<string, unknown>) =>
+			request<any>("/predict/failure/all", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		rul: (payload: Record<string, unknown>) =>
+			request<any>("/predict/rul", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		failureBatch: (equipment_ids: string[], horizon = "24h") => {
+			const q = new URLSearchParams();
+			equipment_ids.forEach((id) => q.append("equipment_ids", id));
+			q.set("horizon", horizon);
+			return request<any>(`/predict/failure/batch?${q.toString()}`, {
+				method: "POST",
+			});
+		},
+		rulBatch: (equipment_ids: string[]) => {
+			const q = new URLSearchParams();
+			equipment_ids.forEach((id) => q.append("equipment_ids", id));
+			return request<any>(`/predict/rul/batch?${q.toString()}`, {
+				method: "POST",
+			});
+		},
+		config: () => request<any>("/predict/config"),
+		history: (equipmentId: string, limit = 50) =>
+			request<any[]>(
+				`/predict/history/${encodeURIComponent(equipmentId)}${qs({ limit })}`,
+			),
+		health: () => request<any>("/predict/health"),
+	},
+
+	reports: {
+		summary: () => request<any>("/reports/summary"),
+		equipment: (
+			params: {
+				facility_id?: string;
+				equipment_type?: string;
+				status?: string;
+			} = {},
+		) => request<any>(`/reports/equipment${qs(params)}`),
+		alerts: (
+			params: {
+				facility_id?: string;
+				equipment_id?: string;
+				severity?: string;
+				status?: string;
+			} = {},
+		) => request<any>(`/reports/alerts${qs(params)}`),
+	},
+
+	users: {
+		list: () => request<any[]>("/users"),
+		create: (payload: Record<string, unknown>) =>
+			request<any>("/users", { method: "POST", body: JSON.stringify(payload) }),
+		update: (id: string, payload: Record<string, unknown>) =>
+			request<any>(`/users/${encodeURIComponent(id)}`, {
+				method: "PATCH",
+				body: JSON.stringify(payload),
+			}),
+	},
+
+	notifications: {
+		mine: () => request<any[]>("/notifications"),
+		unreadCount: () => request<{ count: number }>("/notifications/unread-count"),
+		queue: (
+			params: { status?: string; notification_type?: string; limit?: number } = {},
+		) => request<any[]>(`/notifications/queue${qs(params)}`),
+		read: (id: number) =>
+			request<any>(`/notifications/${id}/read`, { method: "PATCH" }),
+		readAll: () => request<any>("/notifications/read-all", { method: "PATCH" }),
+		send: (payload: Record<string, unknown>) =>
+			request<any>("/notifications/send", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		remove: (id: number) =>
+			request<any>(`/notifications/${id}`, { method: "DELETE" }),
+		clearAll: () =>
+			request<any>("/notifications/clear-all", { method: "DELETE" }),
+		stats: () => request<any>("/notifications/stats"),
+	},
+
+	profile: {
+		get: () => request<any>("/profile"),
+		update: (name: string) =>
+			request<any>(`/profile${qs({ name })}`, { method: "PATCH" }),
+	},
+
+	audit: { list: () => request<any[]>("/audit") },
+	recommendations: { get: () => request<any>("/recommendations") },
+
+	chat: {
+		send: (
+			message: string,
+			conversation_id?: string,
+			context: Record<string, unknown> = {},
+		) =>
+			request<any>("/chat", {
+				method: "POST",
+				body: JSON.stringify({ message, conversation_id, context }),
+			}),
+		conversations: (limit = 20) =>
+			request<any[]>(`/chat/conversations${qs({ limit })}`),
+		conversation: (id: string, limit = 50) =>
+			request<any>(
+				`/chat/conversations/${encodeURIComponent(id)}${qs({ limit })}`,
+			),
+		deleteConversation: (id: string) =>
+			request<any>(`/chat/conversations/${encodeURIComponent(id)}`, {
+				method: "DELETE",
+			}),
+		suggestions: () => request<any>("/chat/suggestions"),
+		exportConversation: (id: string, format = "json") =>
+			request<any>(
+				`/chat/conversations/${encodeURIComponent(id)}/export${qs({ format })}`,
+			),
+	},
+};
+
+// Backwards-compatible helpers used by existing components.
 export async function fetchEquipmentList(params?: {
-  q?: string;
-  county?: string;
-  risk?: string;
-  type?: string;
+	q?: string;
+	county?: string;
+	risk?: string;
+	type?: string;
 }): Promise<Equipment[]> {
-  const query = new URLSearchParams();
-  if (params?.q) query.set("q", params.q);
-  if (params?.county) query.set("county", params.county);
-  if (params?.risk) query.set("risk", params.risk);
-  if (params?.type) query.set("type", params.type);
-
-  const url = `${API_BASE}/equipment${query.toString() ? `?${query.toString()}` : ""}`;
-
-  return fetchWithFallback<Equipment[]>(url, () => {
-    let items = maishawatchData.equipment;
-    if (params?.q) {
-      const q = params.q.toLowerCase().trim();
-      items = items.filter(
-        (e) =>
-          e.id.toLowerCase().includes(q) ||
-          e.name.toLowerCase().includes(q) ||
-          e.serialNumber.toLowerCase().includes(q) ||
-          e.manufacturer?.toLowerCase().includes(q),
-      );
-    }
-    if (params?.risk) {
-      items = items.filter((e) => e.riskLevel === params.risk);
-    }
-    return items;
-  });
+	const rows = await api.equipment.list({
+		search: params?.q,
+		equipment_type: params?.type,
+	});
+	return rows as Equipment[];
 }
-
-/**
- * Fetch single equipment detail
- */
 export async function fetchEquipmentById(
-  id: string,
+	id: string,
 ): Promise<{ data: Equipment; facility: Facility | null } | null> {
-  const url = `${API_BASE}/equipment/${id}`;
-
-  return fetchWithFallback<{ data: Equipment; facility: Facility | null } | null>(
-    url,
-    () => {
-      const eq = maishawatchData.equipment.find((e) => e.id === id);
-      if (!eq) return null;
-      const fac = maishawatchData.facilities.find((f) => f.id === eq.facilityId) || null;
-      return { data: eq, facility: fac };
-    },
-  );
+	try {
+		const result = await api.equipment.detail(id);
+		return {
+			data: result.equipment as Equipment,
+			facility: (result.facility ?? null) as Facility | null,
+		};
+	} catch {
+		return null;
+	}
 }
-
-/**
- * Fetch facilities with pagination and search
- */
 export async function fetchFacilities(params?: {
-  page?: number;
-  pageSize?: number;
-  q?: string;
-  county?: string;
-  kephLevel?: string;
-}): Promise<{ total: number; page: number; pageSize: number; items: Facility[] }> {
-  const query = new URLSearchParams();
-  if (params?.page) query.set("page", String(params.page));
-  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
-  if (params?.q) query.set("q", params.q);
-  if (params?.county) query.set("county", params.county);
-  if (params?.kephLevel) query.set("kephLevel", params.kephLevel);
-
-  const url = `${API_BASE}/facilities${query.toString() ? `?${query.toString()}` : ""}`;
-
-  return fetchWithFallback(url, () => {
-    let list = maishawatchData.facilities;
-    if (params?.q) {
-      const q = params.q.toLowerCase().trim();
-      list = list.filter(
-        (f) => f.name.toLowerCase().includes(q) || f.id.toLowerCase().includes(q),
-      );
-    }
-    if (params?.county) {
-      list = list.filter((f) => f.county.toLowerCase() === params.county?.toLowerCase());
-    }
-    const page = params?.page ?? 1;
-    const pageSize = params?.pageSize ?? 25;
-    const start = (page - 1) * pageSize;
-    return {
-      total: list.length,
-      page,
-      pageSize,
-      items: list.slice(start, start + pageSize),
-    };
-  });
+	q?: string;
+	county?: string;
+	kephLevel?: string;
+}): Promise<{
+	total: number;
+	page: number;
+	pageSize: number;
+	items: Facility[];
+}> {
+	const items = await api.facilities.list({
+		name: params?.q,
+		county: params?.county,
+		keph_level: params?.kephLevel,
+	});
+	return {
+		total: items.length,
+		page: 1,
+		pageSize: items.length,
+		items: items as Facility[],
+	};
 }
-
-/**
- * Fetch active risk & discrepancy alerts
- */
 export async function fetchAlerts(params?: {
-  severity?: string;
-  type?: string;
-  includeAcknowledged?: boolean;
+	severity?: string;
+	type?: string;
+	includeAcknowledged?: boolean;
 }): Promise<Alert[]> {
-  const query = new URLSearchParams();
-  if (params?.severity) query.set("severity", params.severity);
-  if (params?.type) query.set("type", params.type);
-  if (params?.includeAcknowledged) query.set("includeAcknowledged", "true");
-
-  const url = `${API_BASE}/alerts${query.toString() ? `?${query.toString()}` : ""}`;
-
-  return fetchWithFallback<Alert[]>(url, () => maishawatchData.alerts);
+	const result = await api.alerts.list({ severity: params?.severity });
+	return (
+		Array.isArray(result) ? result : (result.items ?? result.alerts ?? [])
+	) as Alert[];
 }
-
-/**
- * Fetch analytics summary / network KPIs
- */
 export async function fetchAnalyticsSummary(): Promise<any> {
-  const url = `${API_BASE}/analytics/summary`;
-  return fetchWithFallback(url, () => ({
-    totalEquipment: maishawatchData.equipment.length,
-    totalFacilities: maishawatchData.facilities.length,
-    criticalRiskCount: maishawatchData.equipment.filter((e) => e.riskLevel === "critical").length,
-    highRiskCount: maishawatchData.equipment.filter((e) => e.riskLevel === "high").length,
-    discrepancyCount: maishawatchData.equipment.filter((e) => e.discrepancyFlagged).length,
-  }));
+	return api.dashboard.summary();
 }
-
-/**
- * Record a new maintenance action (Live mutation to backend)
- */
-export async function submitMaintenanceRecord(payload: {
-  equipmentId: string;
-  type: "preventive" | "inspection" | "corrective";
-  notes: string;
-  technician?: string;
-  actionPerformed?: string;
-  durationHours?: number;
-  partsCost?: number;
-  downtimeHours?: number;
-}): Promise<{ status: string; message: string; data: MaintenanceRecord }> {
-  const res = await fetch(`${API_BASE}/maintenance`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to submit maintenance log: ${res.statusText}`);
-  }
-  return res.json();
+export async function acknowledgeAlert(alertId: string): Promise<any> {
+	return api.alerts.acknowledge(alertId);
 }
-
-/**
- * Acknowledge an alert
- */
-export async function acknowledgeAlert(
-  alertId: string,
-  acknowledgedBy: string = "Biomedical Engineer",
-  notes?: string,
-): Promise<{ status: string; message: string }> {
-  const res = await fetch(`${API_BASE}/alerts/${alertId}/acknowledge`, {
-    method: "PATCH",
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ acknowledgedBy, notes }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to acknowledge alert: ${res.statusText}`);
-  }
-  return res.json();
-}
-
-/**
- * Predict Remaining Useful Life and Risk Factors using backend ML service
- */
-export async function predictEquipmentRul(payload: {
-  equipmentId?: string;
-  equipmentType: string;
-  temperature: number;
-  vibration: number;
-  pressure: number;
-  operatingHours?: number;
-}): Promise<any> {
-  const res = await fetch(`${API_BASE}/predict/rul`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to compute ML prediction: ${res.statusText}`);
-  }
-  return res.json();
-}
-
-/**
- * Complete dataset getter (for full snapshot or remote aggregation)
- */
-export async function getBackendDataset(): Promise<MaishaWatchDataset> {
-  if (DATA_SOURCE !== "remote") return maishawatchData;
-
-  try {
-    const [equipment, alerts] = await Promise.all([
-      fetchEquipmentList(),
-      fetchAlerts(),
-    ]);
-
-    return {
-      meta: {
-        ...maishawatchData.meta,
-        source: "remote FastAPI backend service",
-        generatedAt: new Date().toISOString(),
-        equipmentCount: equipment.length,
-        alertCount: alerts.length,
-      },
-      facilities: maishawatchData.facilities,
-      equipment,
-      alerts,
-    };
-  } catch {
-    return maishawatchData;
-  }
+export async function predictEquipmentRul(
+	payload: Record<string, unknown>,
+): Promise<any> {
+	return api.predictions.rul(payload);
 }
