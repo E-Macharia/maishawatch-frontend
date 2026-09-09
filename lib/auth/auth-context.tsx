@@ -26,12 +26,17 @@ interface AuthContextType {
   logout: () => void;
 }
 
+// Updated BACKEND_BASE - prioritize localhost for development
 const BACKEND_BASE = (
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.BACKEND_API_BASE_URL ||
+  // Use localhost for development, fallback to production
+  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : null) ||
   "https://maishawatch-backend.onrender.com"
 ).replace(/\/$/, "");
+
+// ... rest of the code remains the same
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 

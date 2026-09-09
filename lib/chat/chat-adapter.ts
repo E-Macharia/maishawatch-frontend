@@ -1,38 +1,78 @@
-import { processLocalQuery } from "./local-engine";
-import type { ChatAdapter, ChatMessage } from "@/types/chat";
+// lib/chat/chat-adapter.ts
+import { api } from "@/lib/api/backend-client";
+import type { ChatMessage } from "@/types/chat";
 
-export class LocalSnapshotChatAdapter implements ChatAdapter {
-  async sendMessage(userQuery: string): Promise<ChatMessage> {
-    // Simulate slight natural latency (300ms) for responsive feel
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    return processLocalQuery(userQuery);
+export interface ChatAdapter {
+  sendMessage: (text: string, history: ChatMessage[]) => Promise<ChatMessage>;
+}
+
+class BackendChatAdapter implements ChatAdapter {
+  private conversationId: string | null = null;
+
+  async sendMessage(text: string, history: ChatMessage[]): Promise<ChatMessage> {
+    try {
+      // Send to backend
+      const response = await api.chat.send(
+        text,
+        this.conversationId || undefined,
+        { language: "en" }
+      );
+
+      // Store conversation ID for subsequent messages
+      if (response.conversation_id) {
+        this.conversationId = response.conversation_id;
+      }
+
+      // Format response
+      return {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: response.response,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        suggestedPrompts: response.suggestions || [],
+        navigationAction: response.action ? {
+          autoNavigate: false,
+          path: "",
+        } : undefined,
+      };
+    } catch (error) {
+      console.error("Backend chat error:", error);
+      return {
+        id: `error-${Date.now()}`,
+        role: "assistant",
+        content: "I'm sorry, I'm having trouble connecting to the backend. Please try again later.",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+    }
   }
 }
 
-export class RemoteBackendChatAdapter implements ChatAdapter {
-  private baseUrl: string;
+class MockChatAdapter implements ChatAdapter {
+  async sendMessage(text: string, history: ChatMessage[]): Promise<ChatMessage> {
+    // This is a fallback mock adapter if backend is not available
+    const lowerText = text.toLowerCase();
+    let response = "I'm sorry, I'm having trouble connecting to the backend. Please check your connection and try again.";
 
-  constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL || "http://localhost:8000";
-  }
-
-  async sendMessage(userQuery: string, history?: ChatMessage[]): Promise<ChatMessage> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userQuery, history }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Remote AI model error: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (err) {
-      console.warn("Failed to reach remote AI model backend, falling back to local snapshot engine.", err);
-      return processLocalQuery(userQuery);
+    // Simple fallback responses if backend is unreachable
+    if (lowerText.includes("status") || lowerText.includes("state")) {
+      response = "I'm unable to fetch equipment status from the backend. Please check if the backend service is running.";
+    } else if (lowerText.includes("alert") || lowerText.includes("risk")) {
+      response = "I'm unable to fetch alerts from the backend. Please check if the backend service is running.";
+    } else if (lowerText.includes("maintenance") || lowerText.includes("servic")) {
+      response = "I'm unable to fetch maintenance information from the backend. Please check if the backend service is running.";
     }
+
+    return {
+      id: `assistant-${Date.now()}`,
+      role: "assistant",
+      content: response,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      suggestedPrompts: [
+        "Try connecting to backend",
+        "Check equipment status",
+        "Show alerts",
+      ],
+    };
   }
 }
 
@@ -40,12 +80,12 @@ let adapterInstance: ChatAdapter | null = null;
 
 export function getChatAdapter(): ChatAdapter {
   if (!adapterInstance) {
-    const provider = process.env.NEXT_PUBLIC_CHAT_PROVIDER || "local";
-    if (provider === "remote") {
-      adapterInstance = new RemoteBackendChatAdapter();
-    } else {
-      adapterInstance = new LocalSnapshotChatAdapter();
-    }
+    // Try to use backend adapter first
+    adapterInstance = new BackendChatAdapter();
   }
   return adapterInstance;
+}
+
+export function setChatAdapter(adapter: ChatAdapter) {
+  adapterInstance = adapter;
 }
