@@ -45,12 +45,21 @@ export default function AboutPage() {
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
             <a
-              href="https://maishawatch-backend.onrender.com/docs"
+              href="https://github.com/E-Macharia/maishawatch-frontend"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold text-foreground hover:bg-accent transition-colors"
             >
-              <span>Backend API (Swagger)</span>
+              <span>Frontend GitHub</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+            <a
+              href="https://github.com/E-Macharia/maishawatch-backend"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold text-foreground hover:bg-accent transition-colors"
+            >
+              <span>Backend GitHub</span>
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
