@@ -13,6 +13,8 @@ import { TableEmptyState } from "@/components/dashboard/table-empty-state";
 import { maishawatchData, getFacilityName, getEquipmentName, facilityById, equipmentById } from "@/lib/data";
 import { AlertResolutionDialog } from "@/components/dashboard/alert-resolution-dialog";
 import { HospitalAlertDialog } from "@/components/dashboard/hospital-alert-dialog";
+import { api } from "@/lib/api/backend-client";
+import type { Alert } from "@/types/maishawatch";
 
 const PAGE_SIZE = 8;
 
@@ -22,8 +24,10 @@ export default function AlertsPage() {
   const [query, setQuery] = useState("");
   const [resolved, setResolved] = useState<string[]>([]);
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<(typeof maishawatchData.alerts)[number] | null>(null);
-  const [notify, setNotify] = useState<(typeof maishawatchData.alerts)[number] | null>(null);
+  const [selected, setSelected] = useState<Alert | null>(null);
+  const [notify, setNotify] = useState<Alert | null>(null);
+  const [liveAlerts, setLiveAlerts] = useState<Alert[] | null>(null);
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
 
   useEffect(() => {
     try {
@@ -31,9 +35,54 @@ export default function AlertsPage() {
     } catch {}
   }, []);
 
+  // Fetch live alerts from backend
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadAlerts() {
+      try {
+        const res = await api.alerts.list().catch(() => null);
+        if (!mounted) return;
+        const rawItems = Array.isArray(res) ? res : res?.items || res?.alerts || [];
+        if (Array.isArray(rawItems) && rawItems.length > 0) {
+          const mapped: Alert[] = rawItems.map((item: any) => ({
+            id: String(item.id),
+            type: (item.alert_type?.toLowerCase().includes("discrepancy") ? "discrepancy" : "risk") as "risk" | "discrepancy",
+            severity: (item.severity?.toLowerCase() || "medium") as "critical" | "high" | "medium" | "low",
+            equipmentId: item.equipment_id || item.equipmentId || "",
+            facilityId: item.facility_id || item.facilityId || "",
+            message: item.message || item.title || "Alert triggered",
+            scenarioRationale: item.recommendation || item.scenarioRationale || "",
+            createdAt: item.created_at || item.createdAt || new Date().toISOString(),
+          }));
+          setLiveAlerts(mapped);
+          setIsLiveConnected(true);
+        } else if (res !== null && res !== undefined) {
+          setIsLiveConnected(true);
+        }
+      } catch (err) {
+        console.warn("Could not fetch alerts from backend, using offline dataset", err);
+      }
+    }
+
+    loadAlerts();
+    const interval = setInterval(loadAlerts, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const alertsSource = useMemo(() => {
+    if (liveAlerts && liveAlerts.length > 0) {
+      return liveAlerts;
+    }
+    return maishawatchData.alerts;
+  }, [liveAlerts]);
+
   const filtered = useMemo(
     () =>
-      maishawatchData.alerts.filter(
+      alertsSource.filter(
         (a) =>
           !resolved.includes(a.id) &&
           (severity === "all" || a.severity === severity) &&
@@ -43,17 +92,27 @@ export default function AlertsPage() {
               .toLowerCase()
               .includes(query.toLowerCase()))
       ),
-    [severity, type, query, resolved]
+    [alertsSource, severity, type, query, resolved]
   );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const critical = maishawatchData.alerts.filter((x) => x.severity === "critical" && !resolved.includes(x.id)).length;
-  const discrepancies = maishawatchData.alerts.filter((x) => x.type === "discrepancy" && !resolved.includes(x.id)).length;
+  const critical = alertsSource.filter((x) => x.severity === "critical" && !resolved.includes(x.id)).length;
+  const discrepancies = alertsSource.filter((x) => x.type === "discrepancy" && !resolved.includes(x.id)).length;
 
   const resolve = (id: string) => {
-    setResolved((x) => Array.from(new Set([...x, id])));
+    const nextResolved = Array.from(new Set([...resolved, id]));
+    setResolved(nextResolved);
+    try {
+      localStorage.setItem("maisha-resolved-alerts", JSON.stringify(nextResolved));
+    } catch {}
+
+    // Synchronize resolution to live backend
+    api.alerts.resolve(id).catch((err) => {
+      console.warn(`Failed to resolve alert ${id} on backend:`, err);
+    });
+
     setSelected(null);
     setPage(1);
   };
@@ -70,7 +129,19 @@ export default function AlertsPage() {
       {selected && (
         <AlertResolutionDialog
           alert={selected}
-          equipment={equipmentById.get(selected.equipmentId)!}
+          equipment={
+            equipmentById.get(selected.equipmentId) ?? ({
+              id: selected.equipmentId,
+              name: getEquipmentName(selected.equipmentId) || "Biomedical Asset",
+              model: "Medical Device",
+              serialNumber: selected.equipmentId,
+              facilityId: selected.facilityId,
+              department: "Clinical Engineering",
+              installDate: new Date().toISOString(),
+              status: "active",
+              riskLevel: selected.severity,
+            } as any)
+          }
           onClose={() => setSelected(null)}
           onResolved={resolve}
         />
@@ -78,8 +149,29 @@ export default function AlertsPage() {
       {notify && (
         <HospitalAlertDialog
           alert={notify}
-          equipment={equipmentById.get(notify.equipmentId)!}
-          facility={facilityById.get(notify.facilityId)!}
+          equipment={
+            equipmentById.get(notify.equipmentId) ?? ({
+              id: notify.equipmentId,
+              name: getEquipmentName(notify.equipmentId) || "Biomedical Asset",
+              model: "Medical Device",
+              serialNumber: notify.equipmentId,
+              facilityId: notify.facilityId,
+              department: "Clinical Engineering",
+              installDate: new Date().toISOString(),
+              status: "active",
+              riskLevel: notify.severity,
+            } as any)
+          }
+          facility={
+            facilityById.get(notify.facilityId) ?? ({
+              id: notify.facilityId,
+              name: getFacilityName(notify.facilityId) || "Healthcare Facility",
+              county: "Kenya",
+              level: 4,
+              type: "Hospital",
+              coordinates: { lat: -1.286389, lng: 36.817223 },
+            } as any)
+          }
           onClose={() => setNotify(null)}
         />
       )}
@@ -87,7 +179,15 @@ export default function AlertsPage() {
       {/* Header Banner */}
       <Reveal>
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-red-500">Operational Signals</p>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-red-500">Operational Signals</p>
+            {isLiveConnected && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Backend Connected
+              </span>
+            )}
+          </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Alert Centre</h1>
           <p className="mt-1 max-w-2xl text-xs sm:text-sm text-muted-foreground">
             Turn risk signals into verified biomedical maintenance actions and auditable hospital notifications.
@@ -99,7 +199,7 @@ export default function AlertsPage() {
       <section className="grid gap-4 sm:grid-cols-3">
         <MetricCard
           label="Open Alerts"
-          value={maishawatchData.alerts.length - resolved.length}
+          value={alertsSource.length - resolved.filter((id) => alertsSource.some((a) => a.id === id)).length}
           hint="Signals requiring intervention"
           icon={BellRing}
           tone="amber"

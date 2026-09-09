@@ -11,16 +11,12 @@ import { NextRequest, NextResponse } from "next/server";
  * still show snapshot-based predictions.
  */
 export async function POST(req: NextRequest) {
-  const base = process.env.BACKEND_API_BASE_URL?.replace(/\/$/, "");
-  if (!base) {
-    return NextResponse.json(
-      {
-        error:
-          "BACKEND_API_BASE_URL is not configured. Predictions still work from the snapshot; email notify requires the backend.",
-      },
-      { status: 503 },
-    );
-  }
+  const base = (
+    process.env.BACKEND_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "https://maishawatch-backend.onrender.com"
+  ).replace(/\/$/, "");
 
   let body: { equipmentId?: string; facilityId?: string };
   try {
@@ -40,9 +36,11 @@ export async function POST(req: NextRequest) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  const token = process.env.BACKEND_AUTH_TOKEN;
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  const authHeader = req.headers.get("authorization");
+  if (authHeader) {
+    headers.Authorization = authHeader;
+  } else if (process.env.BACKEND_AUTH_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.BACKEND_AUTH_TOKEN}`;
   }
 
   try {
