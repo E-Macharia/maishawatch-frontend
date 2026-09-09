@@ -527,3 +527,21 @@ export async function predictEquipmentRul(
 ): Promise<any> {
 	return api.predictions.rul(payload);
 }
+export async function submitMaintenanceRecord(payload: {
+	equipmentId: string;
+	type: "preventive" | "inspection" | "corrective";
+	notes: string;
+	technician?: string;
+	actionPerformed?: string;
+	durationHours?: number;
+	partsCost?: number;
+	downtimeHours?: number;
+}): Promise<any> {
+	return api.maintenance.createWorkOrder({
+		equipment_id: payload.equipmentId,
+		title: `${payload.type.toUpperCase()} Maintenance: ${payload.actionPerformed || "Log Entry"}`,
+		description: payload.notes,
+		assigned_to: payload.technician,
+		priority: payload.type === "corrective" ? "high" : "medium",
+	});
+}
