@@ -23,38 +23,29 @@ class BackendChatAdapter implements ChatAdapter {
 				this.conversationId = response.conversation_id;
 			}
 
-			// Format response
-			return {
-				id: `assistant-${Date.now()}`,
-				role: "assistant",
-				content: response.response,
-				timestamp: new Date().toLocaleTimeString([], {
-					hour: "2-digit",
-					minute: "2-digit",
-				}),
-				suggestedPrompts: response.suggestions || [],
-				navigationAction: response.action
-					? {
-							label: `View ${response.action.replace(/_/g, " ")}`,
-							autoNavigate: false,
-							path: "/overview",
-						}
-					: undefined,
-			};
-		} catch (error) {
-			console.error("Backend chat error:", error);
-			return {
-				id: `error-${Date.now()}`,
-				role: "assistant",
-				content:
-					"I'm sorry, I'm having trouble connecting to the backend. Please try again later.",
-				timestamp: new Date().toLocaleTimeString([], {
-					hour: "2-digit",
-					minute: "2-digit",
-				}),
-			};
-		}
-	}
+      // Format response
+      return {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: response.response,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        suggestedPrompts: response.suggestions || [],
+        navigationAction: response.action ? {
+          label: response.action.label || "View Details",
+          autoNavigate: false,
+          path: response.action.path || "",
+        } : undefined,
+      };
+    } catch (error) {
+      console.error("Backend chat error:", error);
+      return {
+        id: `error-${Date.now()}`,
+        role: "assistant",
+        content: "I'm sorry, I'm having trouble connecting to the backend. Please try again later.",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+    }
+  }
 }
 
 class MockChatAdapter implements ChatAdapter {

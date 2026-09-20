@@ -2,9 +2,13 @@
 
 [![Live Frontend](https://img.shields.io/badge/Live%20Frontend-Vercel-black?style=for-the-badge&logo=vercel)](https://maishawatch-frontend.vercel.app/)
 [![Backend API](https://img.shields.io/badge/Backend%20API-Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://maishawatch-backend.onrender.com/docs)
+[![Frontend Repo](https://img.shields.io/badge/Frontend%20Repo-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/E-Macharia/maishawatch-frontend)
+[![Backend Repo](https://img.shields.io/badge/Backend%20Repo-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/E-Macharia/maishawatch-backend)
 
-> 🌐 **Live Web Application:** [https://maishawatch-frontend.vercel.app/](https://maishawatch-frontend.vercel.app/)  
-> ⚡ **Live Backend API (Swagger UI):** [https://maishawatch-backend.onrender.com/docs](https://maishawatch-backend.onrender.com/docs)
+> 🌐 **Live Web Application (Vercel):** [https://maishawatch-frontend.vercel.app/](https://maishawatch-frontend.vercel.app/)  
+> ⚡ **Live Backend API (Render Swagger):** [https://maishawatch-backend.onrender.com/docs](https://maishawatch-backend.onrender.com/docs)  
+> 💻 **Frontend Repository:** [https://github.com/E-Macharia/maishawatch-frontend](https://github.com/E-Macharia/maishawatch-frontend)  
+> 🛠️ **Backend Repository:** [https://github.com/E-Macharia/maishawatch-backend](https://github.com/E-Macharia/maishawatch-backend)
 
 ---
 
@@ -22,7 +26,10 @@ This repository is designed to work **even when the backend team does not expose
 
 ## 1. Architecture
 
-There are two repositories:
+The project is structured across two complementary repositories:
+
+- **Frontend Repository:** [https://github.com/E-Macharia/maishawatch-frontend](https://github.com/E-Macharia/maishawatch-frontend) (Next.js 16, React 19, Tailwind CSS, Vercel)
+- **Backend Repository:** [https://github.com/E-Macharia/maishawatch-backend](https://github.com/E-Macharia/maishawatch-backend) (FastAPI, Scikit-learn ML models, Render)
 
 ```text
 maishawatch-backend/

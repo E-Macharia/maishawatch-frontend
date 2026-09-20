@@ -5,12 +5,12 @@ import { API_BASE, getAuthHeaders } from "@/lib/api/backend-client";
  * Proxy to backend POST /equipment/evaluate
  */
 export async function POST(req: NextRequest) {
-	let body: { equipmentId?: string; equipment_id?: string; facilityId?: string };
-	try {
-		body = await req.json();
-	} catch {
-		return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-	}
+  const base = (
+    process.env.BACKEND_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "https://maishawatch-backend.onrender.com"
+  ).replace(/\/$/, "");
 
 	const equipmentId = body.equipment_id || body.equipmentId;
 	if (!equipmentId) {
@@ -29,15 +29,15 @@ export async function POST(req: NextRequest) {
 		headers.Authorization = authHeader;
 	}
 
-	try {
-		const upstream = await fetch(`${API_BASE}/equipment/evaluate`, {
-			method: "POST",
-			headers,
-			body: JSON.stringify({
-				equipment_id: equipmentId,
-			}),
-			cache: "no-store",
-		});
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const authHeader = req.headers.get("authorization");
+  if (authHeader) {
+    headers.Authorization = authHeader;
+  } else if (process.env.BACKEND_AUTH_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.BACKEND_AUTH_TOKEN}`;
+  }
 
 		const text = await upstream.text();
 		let data: unknown = null;
