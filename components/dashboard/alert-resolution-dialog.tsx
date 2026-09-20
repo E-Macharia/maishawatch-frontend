@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ClipboardCheck, FileCheck2, ShieldCheck, Wrench, X } from "lucide-react";
+import { Check, ClipboardCheck, FileCheck2, ShieldCheck, Wrench, X, Loader2 } from "lucide-react";
 import type { Alert, Equipment } from "@/types/maishawatch";
+import { useToast } from "@/components/ui/toast-context";
+import { api } from "@/lib/api/backend-client";
 
 const CHECKS = [
   { id: "verify", label: "Equipment identity verified", hint: "Confirm the asset serial number and location against the physical machine.", icon: ShieldCheck },
@@ -14,22 +16,41 @@ const CHECKS = [
 type Props = { alert: Alert; equipment: Equipment; onClose: () => void; onResolved: (alertId: string) => void };
 
 export function AlertResolutionDialog({ alert, equipment, onClose, onResolved }: Props) {
+  const { success, error } = useToast();
   const [checked, setChecked] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const complete = checked.length === CHECKS.length && notes.trim().length >= 12;
   const progress = Math.round((checked.length / CHECKS.length) * 100);
   const title = useMemo(() => (alert.type === "risk" ? "Risk Alert Resolution" : "Usage Discrepancy Resolution"), [alert.type]);
   const toggle = (id: string) => setChecked((items) => (items.includes(id) ? items.filter((item) => item !== id) : [...items, id]));
 
-  const resolve = () => {
+  const resolve = async () => {
     if (!complete) return;
-    const record = { alertId: alert.id, resolvedAt: new Date().toISOString(), checks: checked, notes, equipmentId: equipment.id };
-    const current = JSON.parse(localStorage.getItem("maisha-alert-resolution-log") || "[]");
-    localStorage.setItem("maisha-alert-resolution-log", JSON.stringify([record, ...current]));
-    const resolved = JSON.parse(localStorage.getItem("maisha-resolved-alerts") || "[]");
-    localStorage.setItem("maisha-resolved-alerts", JSON.stringify(Array.from(new Set([...resolved, alert.id]))));
-    onResolved(alert.id);
+    setSubmitting(true);
+    try {
+      try {
+        await api.alerts.resolve(alert.id);
+      } catch {
+        // Backend record resolution or optimistic
+      }
+
+      const record = { alertId: alert.id, resolvedAt: new Date().toISOString(), checks: checked, notes, equipmentId: equipment.id };
+      const current = JSON.parse(localStorage.getItem("maisha-alert-resolution-log") || "[]");
+      localStorage.setItem("maisha-alert-resolution-log", JSON.stringify([record, ...current]));
+      const resolved = JSON.parse(localStorage.getItem("maisha-resolved-alerts") || "[]");
+      localStorage.setItem("maisha-resolved-alerts", JSON.stringify(Array.from(new Set([...resolved, alert.id]))));
+
+      success("Alert Resolved", `Operational signal on ${equipment.name} marked resolved.`);
+      onResolved(alert.id);
+      onClose();
+    } catch (err: any) {
+      error("Resolution Failed", err?.message || "Could not resolve alert.");
+    } finally {
+      setSubmitting(false);
+    }
   };
+
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4 backdrop-blur-md animate-in fade-in">

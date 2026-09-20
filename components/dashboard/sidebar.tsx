@@ -21,7 +21,7 @@ import {
 import { useSidebar } from "./sidebar-context";
 import { NavGroup, UserProfile } from "@/types/navigation";
 import { cn } from "@/lib/utils";
-import { maishawatchData } from "@/lib/data";
+import { useLiveData } from "@/lib/data/live-context";
 import { useAuth } from "@/lib/auth/auth-context";
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -46,7 +46,9 @@ export default function Sidebar({
 	const { isCollapsed, isMobileOpen, toggleSidebar, closeMobileSidebar } =
 		useSidebar();
 	const { user: authUser, isAuthenticated, openLoginModal } = useAuth();
-	const alertCount = maishawatchData.alerts.length;
+	const { alerts } = useLiveData();
+	const alertCount = alerts.length;
+
 
 	return (
 		<>

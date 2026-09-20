@@ -9,6 +9,8 @@ import {
 	Search,
 	ShieldAlert,
 	X,
+	RefreshCw,
+	Radio,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -17,19 +19,52 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/dashboard/pagination";
 import { FilterSelect } from "@/components/dashboard/filter-select";
 import { TableEmptyState } from "@/components/dashboard/table-empty-state";
-import { getFacilityRiskRanking } from "@/lib/data/metrics";
-import { maishawatchData } from "@/lib/data";
+import { useLiveData } from "@/lib/data/live-context";
 
 const PAGE_SIZE = 10;
 
 export default function FacilitiesPage() {
-	const facilities = getFacilityRiskRanking();
+	const { facilities: rawFacilities, equipment, isLive, isLoading, refresh } = useLiveData();
 	const [query, setQuery] = useState("");
 	const [county, setCounty] = useState("all");
 	const [risk, setRisk] = useState("all");
 	const [page, setPage] = useState(1);
 
-	const counties = [...new Set(facilities.map((x) => x.county))].sort();
+	// Compute dynamic risk ranking per facility from live data
+	const facilities = useMemo(() => {
+		const byFacility = new Map<string, typeof equipment>();
+		for (const item of equipment) {
+			const existing = byFacility.get(item.facilityId) ?? [];
+			existing.push(item);
+			byFacility.set(item.facilityId, existing);
+		}
+
+		return rawFacilities
+			.map((facility) => {
+				const eq = byFacility.get(facility.id) ?? [];
+				const averageRisk = eq.length
+					? eq.reduce((sum, item) => sum + item.riskScore, 0) / eq.length
+					: 0;
+				const criticalCount = eq.filter((item) => item.riskLevel === "critical").length;
+				const discrepancyCount = eq.filter((item) => item.discrepancyFlagged).length;
+				const downtimeHours = eq.reduce((sum, item) => sum + (item.totalDowntimeHours ?? 0), 0);
+				return {
+					...facility,
+					equipmentCount: eq.length,
+					averageRisk: Math.round(averageRisk),
+					criticalCount,
+					discrepancyCount,
+					downtimeHours: Number(downtimeHours.toFixed(1)),
+				};
+			})
+			.filter((f) => f.equipmentCount > 0 || rawFacilities.length < 50)
+			.sort((a, b) => b.averageRisk - a.averageRisk || b.criticalCount - a.criticalCount);
+	}, [rawFacilities, equipment]);
+
+	const counties = useMemo(
+		() => [...new Set(facilities.map((x) => x.county))].sort(),
+		[facilities],
+	);
 
 	const filtered = useMemo(
 		() =>
@@ -69,17 +104,39 @@ export default function FacilitiesPage() {
 		<div className="space-y-6">
 			{/* Header Banner */}
 			<Reveal>
-				<div>
-					<p className="text-[10px] font-bold uppercase tracking-wider text-primary">
-						Network View
-					</p>
-					<h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-						Facilities Directory
-					</h1>
-					<p className="mt-1 max-w-2xl text-xs sm:text-sm text-muted-foreground">
-						Compare operational risk, equipment exposure, and maintenance pressure
-						across monitored hospitals.
-					</p>
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+					<div>
+						<div className="flex items-center gap-2">
+							<p className="text-[10px] font-bold uppercase tracking-wider text-primary">
+								Network View
+							</p>
+							<span
+								className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+									isLive
+										? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+										: "border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+								}`}
+							>
+								<Radio className="h-2.5 w-2.5 animate-pulse" />
+								{isLive ? "Live API Connected" : "Connecting to API..."}
+							</span>
+						</div>
+						<h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+							Facilities Directory
+						</h1>
+						<p className="mt-1 max-w-2xl text-xs sm:text-sm text-muted-foreground">
+							Compare operational risk, equipment exposure, and maintenance pressure
+							across monitored hospitals.
+						</p>
+					</div>
+					<button
+						onClick={() => refresh()}
+						disabled={isLoading}
+						className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+					>
+						<RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+						Refresh API Data
+					</button>
 				</div>
 			</Reveal>
 
@@ -100,7 +157,7 @@ export default function FacilitiesPage() {
 				/>
 				<MetricCard
 					label="Counties Represented"
-					value={new Set(maishawatchData.facilities.map((x) => x.county)).size}
+					value={counties.length}
 					hint="Active network coverage"
 					icon={MapPin}
 					tone="emerald"

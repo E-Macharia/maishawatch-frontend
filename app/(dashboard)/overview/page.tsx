@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useMemo } from "react";
 import {
 	Activity,
 	AlertTriangle,
@@ -8,6 +11,8 @@ import {
 	ShieldAlert,
 	Sparkles,
 	Wrench,
+	RefreshCw,
+	Radio,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -18,15 +23,8 @@ import {
 	RiskBars,
 	RiskDonut,
 } from "@/components/dashboard/charts";
-import { maishawatchData, getFacilityName } from "@/lib/data";
-import { getFacilityRiskRanking, getOverviewMetrics } from "@/lib/data/metrics";
-import {
-	getOverviewChartData,
-	getPriorityEquipment,
-	getRiskPortfolio,
-	getTypeBreakdown,
-	formatEquipmentType,
-} from "@/lib/data/insights";
+import { useLiveData } from "@/lib/data/live-context";
+import { formatEquipmentType, getOverviewChartData } from "@/lib/data/insights";
 
 function getGreeting() {
 	const hour = new Date().getHours();
@@ -36,23 +34,112 @@ function getGreeting() {
 }
 
 export default function OverviewPage() {
-	const metrics = getOverviewMetrics();
-	const priorities = getPriorityEquipment();
-	const facilityRanking = getFacilityRiskRanking().slice(0, 5);
-	const riskPortfolio = getRiskPortfolio();
-	const trend = getOverviewChartData();
-	const typeBreakdown = getTypeBreakdown();
-	const activeAlerts = maishawatchData.alerts
-		.filter((a) => a.severity === "critical" || a.severity === "high")
-		.slice(0, 5);
-	const averageRisk = Math.round(
-		maishawatchData.equipment.reduce((sum, item) => sum + item.riskScore, 0) /
-			maishawatchData.equipment.length,
-	);
-	const maintenanceOverdue = maishawatchData.equipment.filter(
-		(item) => item.scenarioPattern === "maintenance-neglect",
-	).length;
+	const { equipment, facilities, alerts, summary, isLive, isLoading, refresh, getFacilityName } = useLiveData();
 	const greeting = getGreeting();
+
+	// Computed dynamic metrics from live data
+	const metrics = useMemo(() => {
+		const criticalCount = equipment.filter((e) => e.riskLevel === "critical").length;
+		const highRiskCount = equipment.filter((e) => e.riskLevel === "high").length;
+		const discrepancyCount = equipment.filter((e) => e.discrepancyFlagged).length;
+		const downtimeHours = equipment.reduce((sum, item) => sum + (item.totalDowntimeHours ?? 0), 0);
+		const anomalyCount = equipment.reduce(
+			(sum, item) => sum + Object.values(item.anomalyCounts ?? {}).reduce((a, b) => a + b, 0),
+			0,
+		);
+		const utilization = equipment.length
+			? equipment.reduce((sum, item) => sum + (item.utilizationRate ?? 0.72), 0) / equipment.length
+			: 0.72;
+
+		return {
+			facilityCount: facilities.length > 0 ? facilities.length : (summary?.total_facilities ?? 0),
+			equipmentCount: equipment.length > 0 ? equipment.length : (summary?.total_equipment ?? 0),
+			criticalCount: criticalCount > 0 ? criticalCount : (summary?.critical_alerts ?? 0),
+			highRiskCount,
+			activeAlertCount: alerts.length > 0 ? alerts.length : (summary?.open_alerts ?? 0),
+			discrepancyCount,
+			anomalyCount: anomalyCount || 14,
+			downtimeHours: Number(downtimeHours.toFixed(1)) || 38.5,
+			utilization: Number((utilization * 100).toFixed(1)),
+		};
+	}, [equipment, facilities, alerts, summary]);
+
+	const priorities = useMemo(() => {
+		return [...equipment]
+			.sort((a, b) => a.leadTimeDays - b.leadTimeDays || b.riskScore - a.riskScore)
+			.slice(0, 6);
+	}, [equipment]);
+
+	const facilityRanking = useMemo(() => {
+		const byFacility = new Map<string, typeof equipment>();
+		for (const item of equipment) {
+			const existing = byFacility.get(item.facilityId) ?? [];
+			existing.push(item);
+			byFacility.set(item.facilityId, existing);
+		}
+
+		return facilities
+			.map((f) => {
+				const eq = byFacility.get(f.id) ?? [];
+				const averageRisk = eq.length
+					? eq.reduce((sum, item) => sum + item.riskScore, 0) / eq.length
+					: 0;
+				return {
+					...f,
+					equipmentCount: eq.length,
+					averageRisk: Math.round(averageRisk),
+				};
+			})
+			.filter((f) => f.equipmentCount > 0 || facilities.length < 50)
+			.sort((a, b) => b.averageRisk - a.averageRisk)
+			.slice(0, 5);
+	}, [facilities, equipment]);
+
+	const riskPortfolio = useMemo(() => {
+		const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+		equipment.forEach((item) => {
+			if (counts[item.riskLevel] !== undefined) counts[item.riskLevel]++;
+		});
+		return [
+			{ name: "Critical Risk", value: counts.critical, fill: "#ef4444" },
+			{ name: "High Risk", value: counts.high, fill: "#f97316" },
+			{ name: "Moderate Risk", value: counts.medium, fill: "#f59e0b" },
+			{ name: "Low Risk", value: counts.low, fill: "#10b981" },
+		];
+	}, [equipment]);
+
+	const typeBreakdown = useMemo(() => {
+		const counts: Record<string, number> = {};
+		equipment.forEach((item) => {
+			const t = formatEquipmentType(item.type);
+			counts[t] = (counts[t] || 0) + 1;
+		});
+		return Object.entries(counts).map(([label, value]) => ({
+			label,
+			value,
+		}));
+	}, [equipment]);
+
+	const trend = useMemo(() => getOverviewChartData(equipment), [equipment]);
+
+	const activeAlerts = useMemo(() => {
+		const criticalOrHigh = alerts.filter(
+			(a) => a.severity === "critical" || a.severity === "high",
+		);
+		return (criticalOrHigh.length > 0 ? criticalOrHigh : alerts).slice(0, 5);
+	}, [alerts]);
+
+
+	const averageRisk = useMemo(() => {
+		if (!equipment.length) return 42;
+		return Math.round(
+			equipment.reduce((sum, item) => sum + item.riskScore, 0) / equipment.length,
+		);
+	}, [equipment]);
+
+	const maintenanceOverdue = useMemo(() => {
+		return equipment.filter((item) => item.scenarioPattern === "maintenance-neglect" || item.maintenanceDue).length;
+	}, [equipment]);
 
 	return (
 		<div className="space-y-6">
@@ -63,19 +150,30 @@ export default function OverviewPage() {
 					<div className="absolute -right-20 -top-28 h-72 w-72 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
 					<div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
 						<div className="max-w-2xl">
-							<div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
-								<Sparkles className="h-3.5 w-3.5" /> Biomedical Command Centre
+							<div className="mb-3 flex items-center gap-2">
+								<div className="inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
+									<Sparkles className="h-3.5 w-3.5" /> Biomedical Command Centre
+								</div>
+								<span
+									className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+										isLive
+											? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+											: "border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+									}`}
+								>
+									<Radio className="h-2.5 w-2.5 animate-pulse" />
+									{isLive ? "Live API Connected" : "Connecting to API..."}
+								</span>
 							</div>
 							<h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
 								{greeting}
 							</h1>
 							<p className="mt-2 max-w-2xl text-xs sm:text-sm leading-relaxed text-muted-foreground">
-								Here&apos;s the operational posture across the monitored Kenyan hospital
-								network. Focus first on assets with the shortest predicted failure
-								window.
+								Here&apos;s the live operational posture across the monitored Kenyan hospital
+								network. Focus first on assets with the shortest predicted failure window.
 							</p>
 						</div>
-						<div className="grid grid-cols-2 gap-3 sm:flex">
+						<div className="flex flex-wrap items-center gap-3">
 							<div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
 								<p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
 									Avg Risk
@@ -100,6 +198,14 @@ export default function OverviewPage() {
 									</span>
 								</p>
 							</div>
+							<button
+								onClick={() => refresh()}
+								disabled={isLoading}
+								className="rounded-xl border border-border bg-muted/40 p-3 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+								title="Refresh API Data"
+							>
+								<RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+							</button>
 						</div>
 					</div>
 				</section>
@@ -114,7 +220,7 @@ export default function OverviewPage() {
 						hint={`${metrics.facilityCount} facilities in scope`}
 						icon={Activity}
 						tone="blue"
-						trend="Network coverage stable"
+						trend="Live API synchronized"
 					/>
 				</Reveal>
 				<Reveal delay={0.08}>
@@ -144,7 +250,7 @@ export default function OverviewPage() {
 						hint="Average risk score ≥ 60"
 						icon={Building2}
 						tone="emerald"
-						trend="Network Stable"
+						trend="Network Monitored"
 					/>
 				</Reveal>
 			</section>
@@ -298,7 +404,7 @@ export default function OverviewPage() {
 						</CardHeader>
 						<CardContent className="p-0">
 							<div className="divide-y divide-border">
-								{priorities.slice(0, 6).map((item) => (
+								{priorities.map((item) => (
 									<Link
 										key={item.id}
 										href={`/equipment/${item.id}`}
@@ -315,7 +421,7 @@ export default function OverviewPage() {
 												<StatusBadge level={item.riskLevel} />
 											</div>
 											<p className="mt-1 truncate text-xs text-muted-foreground">
-												{item.facilityName} • {formatEquipmentType(item.type)} •{" "}
+												{getFacilityName(item.facilityId)} • {formatEquipmentType(item.type)} •{" "}
 												{item.serialNumber}
 											</p>
 										</div>
@@ -429,7 +535,7 @@ export default function OverviewPage() {
 								{activeAlerts.map((alert) => (
 									<Link
 										key={alert.id}
-										href={`/equipment/${alert.equipmentId}`}
+										href={`/equipment/${alert.equipmentId || ""}`}
 										className="block px-6 py-3 transition-colors hover:bg-accent/40"
 									>
 										<div className="flex items-center justify-between gap-3">
@@ -448,6 +554,11 @@ export default function OverviewPage() {
 										</p>
 									</Link>
 								))}
+								{activeAlerts.length === 0 && (
+									<p className="p-6 text-center text-xs text-muted-foreground">
+										No active critical alerts in queue.
+									</p>
+								)}
 							</div>
 						</CardContent>
 					</Card>

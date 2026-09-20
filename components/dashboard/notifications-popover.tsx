@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bell, CheckCheck, ExternalLink, X } from "lucide-react";
-import { maishawatchData, getEquipmentName, getFacilityName } from "@/lib/data";
+import { useLiveData } from "@/lib/data/live-context";
 
 export function NotificationsPopover() {
+  const { alerts: liveAlerts, getEquipmentName, getFacilityName } = useLiveData();
   const [open, setOpen] = useState(false);
   const [read, setRead] = useState<string[]>([]);
 
@@ -16,9 +17,10 @@ export function NotificationsPopover() {
   }, []);
 
   const alerts = useMemo(
-    () => maishawatchData.alerts.filter((a) => a.severity === "critical" || a.severity === "high").slice(0, 6),
-    []
+    () => liveAlerts.filter((a) => a.severity === "critical" || a.severity === "high").slice(0, 6),
+    [liveAlerts]
   );
+
 
   const unread = alerts.filter((a) => !read.includes(a.id));
 

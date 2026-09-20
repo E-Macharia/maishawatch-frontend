@@ -24,6 +24,7 @@ type Props = {
 	equipment: Equipment;
 	facilityId?: string;
 	enableSimulation?: boolean;
+	enableNotify?: boolean;
 };
 
 function pct(v: number) {
@@ -65,84 +66,97 @@ function HorizonBar({
 
 export function PredictionPanel({
 	equipment,
-	facilityId,
 	enableSimulation = true,
 }: Props) {
-	const view = getPredictionView(equipment);
-	const recommendation = getRecommendationFromPrediction(view);
+	const initialView = getPredictionView(equipment);
+	const [liveView, setLiveView] = useState(initialView);
+	const [customRecommendation, setCustomRecommendation] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [result, setResult] = useState<{
 		ok: boolean;
 		message: string;
-		data?: {
-			failure_probability?: number;
-			severity?: string;
-			recommendation?: string;
-			status?: string;
-			horizon?: string;
-		};
 	} | null>(null);
+
+	const recommendation = customRecommendation || getRecommendationFromPrediction(liveView);
 
 	async function handleRunSimulation() {
 		setBusy(true);
 		setResult(null);
 		try {
-			const payload = {
-				equipment_id: equipment.id,
-				facility_id: facilityId ?? equipment.facilityId,
-				// horizon: "all",  // optional, add if backend requires
-			};
+			// Call live prediction endpoints
+			const [failureData, rulData] = await Promise.allSettled([
+				api.predictions.failureAll({ equipment_id: equipment.id }),
+				api.predictions.rul({ equipment_id: equipment.id }),
+			]);
 
-			console.log("Sending payload:", payload);
+			let p24 = liveView.p24;
+			let p72 = liveView.p72;
+			let p168 = liveView.p168;
+			let maxProb = liveView.maxProb;
+			let overallSeverity = liveView.level;
+			let rulHours = liveView.rulHours;
+			let rulDays = liveView.rulDays;
+			let rec = customRecommendation;
 
-			const data = await api.predictions.failureAll(payload);
+			if (failureData.status === "fulfilled" && failureData.value) {
+				const d = failureData.value;
+				p24 = d.predictions?.["24h"]?.probability ?? p24;
+				p72 = d.predictions?.["72h"]?.probability ?? p72;
+				p168 = d.predictions?.["168h"]?.probability ?? p168;
+				maxProb = d.max_probability ?? Math.max(p24, p72, p168);
+				overallSeverity = (d.overall_severity?.toLowerCase() ||
+					(maxProb >= 0.8
+						? "critical"
+						: maxProb >= 0.6
+							? "high"
+							: maxProb >= 0.3
+								? "medium"
+								: "low")) as RiskLevel;
+				if (d.recommendation) rec = d.recommendation;
+			}
 
-			const prob = data.failure_probability ?? 0;
-			const severity = data.severity ?? "unknown";
-			const horizon = data.horizon ?? "N/A";
-			const rec = data.recommendation ?? "No recommendation";
-			const status = data.status ?? "unknown";
+			if (rulData.status === "fulfilled" && rulData.value) {
+				const r = rulData.value;
+				rulHours = Math.round(r.rul_hours ?? rulHours);
+				rulDays = Number((r.rul_days ?? rulHours / 24).toFixed(1));
+				if (!rec && r.recommendation) rec = r.recommendation;
+			}
+
+			setCustomRecommendation(rec);
+			setLiveView({
+				...liveView,
+				p24,
+				p72,
+				p168,
+				maxProb,
+				rulHours,
+				rulDays,
+				level: overallSeverity,
+				source: "model",
+			});
 
 			const message =
-				`Failure probability: ${pct(prob)} over ${horizon}. ` +
-				`Severity: ${severity}. Status: ${status}. ` +
-				`Recommendation: ${rec}`;
+				`Simulation evaluated: Max risk ${pct(maxProb)}, RUL ${rulHours} hrs (${rulDays} days). ` +
+				`Severity: ${overallSeverity.toUpperCase()}.`;
 
 			setResult({
 				ok: true,
 				message,
-				data: {
-					failure_probability: prob,
-					severity,
-					recommendation: rec,
-					status,
-					horizon,
-				},
 			});
 		} catch (err) {
 			console.error("Prediction error:", err);
-
-			// Handle timeout (AbortError) gracefully
-			if (err instanceof DOMException && err.name === "AbortError") {
-				setResult({
-					ok: false,
-					message:
-						"⏱️ The prediction request timed out. The server may still be processing your request. Please check the results later or try again.",
-				});
-			} else {
-				const errorMsg =
-					err instanceof Error ? err.message : "Could not reach prediction service.";
-				setResult({
-					ok: false,
-					message: `❌ ${errorMsg}`,
-				});
-			}
+			const errorMsg =
+				err instanceof Error ? err.message : "Could not reach prediction service.";
+			setResult({
+				ok: false,
+				message: `Could not complete live simulation: ${errorMsg}`,
+			});
 		} finally {
 			setBusy(false);
 		}
 	}
 
-	const isCritical = view.level === "critical" || view.level === "high";
+	const isCritical = liveView.level === "critical" || liveView.level === "high";
 
 	return (
 		<Card className="border-border bg-card shadow-xs">
@@ -161,15 +175,15 @@ export function PredictionPanel({
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
-						<StatusBadge level={view.level as RiskLevel} />
+						<StatusBadge level={liveView.level as RiskLevel} />
 						<span
 							className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-								view.source === "model"
+								liveView.source === "model"
 									? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
 									: "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400"
 							}`}
 						>
-							{view.source === "model" ? (
+							{liveView.source === "model" ? (
 								<>
 									<Sparkles className="h-3 w-3" /> Model
 								</>
@@ -189,9 +203,9 @@ export function PredictionPanel({
 					<p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
 						Predicted failure probability
 					</p>
-					<HorizonBar label="Next 24 hours" probability={view.p24} />
-					<HorizonBar label="Next 72 hours" probability={view.p72} />
-					<HorizonBar label="Next 7 days (168h)" probability={view.p168} />
+					<HorizonBar label="Next 24 hours" probability={liveView.p24} />
+					<HorizonBar label="Next 72 hours" probability={liveView.p72} />
+					<HorizonBar label="Next 7 days (168h)" probability={liveView.p168} />
 				</div>
 
 				{/* RUL */}
@@ -204,13 +218,13 @@ export function PredictionPanel({
 							</p>
 						</div>
 						<p className="mt-2 text-2xl font-extrabold font-mono text-foreground">
-							{view.rulHours}
+							{liveView.rulHours}
 							<span className="ml-1 text-xs font-normal text-muted-foreground">
 								hours
 							</span>
 						</p>
 						<p className="mt-0.5 text-xs text-muted-foreground">
-							≈ {view.rulDays} days · source: {view.source}
+							≈ {liveView.rulDays} days · source: {liveView.source}
 						</p>
 					</div>
 					<div className="rounded-xl border border-border bg-muted/40 p-3.5">
@@ -221,7 +235,7 @@ export function PredictionPanel({
 							</p>
 						</div>
 						<p className="mt-2 text-2xl font-extrabold font-mono text-foreground">
-							{pct(view.maxProb)}
+							{pct(liveView.maxProb)}
 						</p>
 						<p className="mt-0.5 text-xs text-muted-foreground">
 							Highest of 24h / 72h / 168h windows
@@ -266,10 +280,11 @@ export function PredictionPanel({
 							) : (
 								<Brain className="h-3.5 w-3.5" />
 							)}
-							{busy ? "Running simulation…" : "Run Failure Simulation"}
+							{busy ? "Running simulation…" : "Run Live ML Simulation"}
 						</button>
 						<p className="text-[11px] text-muted-foreground">
-							Calls the backend ML evaluation and returns the latest risk assessment.
+							Calls the backend ML models (/predict/failure/all &amp; /predict/rul) and
+							updates the live risk assessment.
 						</p>
 						{result && (
 							<div

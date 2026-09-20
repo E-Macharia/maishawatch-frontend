@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use } from "react";
-import { notFound } from "next/navigation";
+import { use, useMemo, useState } from "react";
 import {
 	ArrowLeft,
 	ArrowUpRight,
@@ -12,17 +11,19 @@ import {
 	ShieldCheck,
 	Wrench,
 	Send,
+	Loader2,
+	CircleAlert,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Reveal } from "@/components/dashboard/motion";
 import { RiskDonut } from "@/components/dashboard/charts";
+import { useLiveData } from "@/lib/data/live-context";
 import {
 	getFacilitySummary,
 	getFacilityEligibilitySummary,
 	formatEquipmentType,
 } from "@/lib/data/insights";
-import { useState } from "react";
 import { api } from "@/lib/api/backend-client";
 
 interface Props {
@@ -31,9 +32,40 @@ interface Props {
 
 export default function FacilityDetailPage({ params }: Props) {
 	const { facilityId } = use(params);
-	const summary = getFacilitySummary(facilityId);
+	const { facilities, equipment, isLoading } = useLiveData();
+	const summary = useMemo(
+		() => getFacilitySummary(facilityId, facilities, equipment),
+		[facilityId, facilities, equipment],
+	);
 	const facility = summary.facility;
-	if (!facility) notFound();
+
+
+	if (isLoading && !facility) {
+		return (
+			<div className="flex min-h-[400px] flex-col items-center justify-center gap-3">
+				<Loader2 className="h-8 w-8 animate-spin text-primary" />
+				<p className="text-sm font-medium text-muted-foreground">Loading facility intelligence...</p>
+			</div>
+		);
+	}
+
+	if (!facility) {
+		return (
+			<div className="space-y-6">
+				<Link
+					href="/facilities"
+					className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+				>
+					<ArrowLeft className="h-3.5 w-3.5" /> Back to facilities
+				</Link>
+				<Card className="p-8 text-center border-border">
+					<CircleAlert className="mx-auto h-10 w-10 text-amber-500 mb-3" />
+					<h2 className="text-lg font-bold text-foreground">Facility Not Found</h2>
+					<p className="text-xs text-muted-foreground mt-1">Facility with ID {facilityId} was not found in the live backend system.</p>
+				</Card>
+			</div>
+		);
+	}
 
 	const risk = {
 		critical: summary.equipment.filter((e) => e.riskLevel === "critical").length,
@@ -41,6 +73,7 @@ export default function FacilityDetailPage({ params }: Props) {
 		medium: summary.equipment.filter((e) => e.riskLevel === "medium").length,
 		low: summary.equipment.filter((e) => e.riskLevel === "low").length,
 	};
+
 
 	const donut = [
 		{ name: "Critical", value: risk.critical, fill: "#ef4444" },

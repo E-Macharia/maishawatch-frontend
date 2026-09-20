@@ -1,18 +1,12 @@
-import dataset from "@/lib/data/generated/dataset.json";
-import type { MaishaWatchDataset } from "@/types/maishawatch";
+import type { Equipment, Facility, Alert, MaishaWatchDataset } from "@/types/maishawatch";
 
-export const maishawatchData = dataset as unknown as MaishaWatchDataset;
+export * from "./live-context";
+export * from "./insights";
+export * from "./metrics";
 
-export const facilityById = new Map(
-  maishawatchData.facilities.map((facility) => [facility.id, facility]),
-);
+export const getFacilityName = (facilityId: string, facilities: Facility[] = []) =>
+  facilities.find((f) => f.id === facilityId)?.name ?? `Facility ${facilityId}`;
 
-export const equipmentById = new Map(
-  maishawatchData.equipment.map((equipment) => [equipment.id, equipment]),
-);
+export const getEquipmentName = (equipmentId: string, equipment: Equipment[] = []) =>
+  equipment.find((e) => e.id === equipmentId)?.name ?? `Equipment ${equipmentId}`;
 
-export const getFacilityName = (facilityId: string) =>
-  facilityById.get(facilityId)?.name ?? "Unknown facility";
-
-export const getEquipmentName = (equipmentId: string) =>
-  equipmentById.get(equipmentId)?.name ?? "Unknown equipment";

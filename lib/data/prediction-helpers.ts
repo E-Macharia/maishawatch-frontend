@@ -1,5 +1,4 @@
 import type { Equipment, RiskLevel } from "@/types/maishawatch";
-import { maishawatchData } from "@/lib/data";
 
 export type PredictionView = {
   p24: number;
@@ -28,35 +27,35 @@ function levelFromProbAndRul(p: number, rulHours: number): RiskLevel {
 }
 
 /**
- * Prefer ML fields from the snapshot; fall back to telemetry riskScore / rulHours.
+ * Prefer ML fields from the backend; fall back to telemetry riskScore / rulHours.
  * This is the single source of truth for all prediction UI.
  */
 export function getPredictionView(equipment: Equipment): PredictionView {
-  const telemetryProb = asUnit(equipment.riskScore, 0);
+  const telemetryProb = asUnit(equipment?.riskScore, 0);
   const hasModel =
-    equipment.mlSource === "model" ||
-    equipment.failureProbability24h != null ||
-    equipment.failureProbability72h != null ||
-    equipment.failureProbability168h != null;
+    equipment?.mlSource === "model" ||
+    equipment?.failureProbability24h != null ||
+    equipment?.failureProbability72h != null ||
+    equipment?.failureProbability168h != null;
 
-  const p24 = asUnit(equipment.failureProbability24h, telemetryProb);
-  const p72 = asUnit(equipment.failureProbability72h, telemetryProb);
-  const p168 = asUnit(equipment.failureProbability168h, telemetryProb);
+  const p24 = asUnit(equipment?.failureProbability24h, telemetryProb);
+  const p72 = asUnit(equipment?.failureProbability72h, telemetryProb);
+  const p168 = asUnit(equipment?.failureProbability168h, telemetryProb);
   const maxProb = Math.max(p24, p72, p168);
 
   const rulHours = Math.max(
     0,
     Math.round(
-      equipment.mlRulHours ??
-        equipment.rulHours ??
-        (equipment.leadTimeDays != null ? equipment.leadTimeDays * 24 : 0),
+      equipment?.mlRulHours ??
+        equipment?.rulHours ??
+        (equipment?.leadTimeDays != null ? equipment.leadTimeDays * 24 : 0),
     ),
   );
   const rulDays = Math.max(0, Math.round(rulHours / 24));
 
   const level =
-    (equipment.mlRiskLevel as RiskLevel | undefined) ??
-    equipment.riskLevel ??
+    (equipment?.mlRiskLevel as RiskLevel | undefined) ??
+    equipment?.riskLevel ??
     levelFromProbAndRul(maxProb, rulHours);
 
   return {
@@ -85,8 +84,8 @@ export function getRecommendationFromPrediction(view: PredictionView): string {
 }
 
 /** Fleet ranking for the Predictions page. */
-export function getPredictiveEquipmentList() {
-  return maishawatchData.equipment
+export function getPredictiveEquipmentList(equipmentList: Equipment[] = []) {
+  return equipmentList
     .map((eq) => {
       const view = getPredictionView(eq);
       return { equipment: eq, view };
@@ -94,8 +93,8 @@ export function getPredictiveEquipmentList() {
     .sort((a, b) => b.view.maxProb - a.view.maxProb);
 }
 
-export function getPredictiveSummary() {
-  const list = getPredictiveEquipmentList();
+export function getPredictiveSummary(equipmentList: Equipment[] = []) {
+  const list = getPredictiveEquipmentList(equipmentList);
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const row of list) {
     counts[row.view.level] += 1;
@@ -108,3 +107,4 @@ export function getPredictiveSummary() {
     telemetryCount: list.length - modelCount,
   };
 }
+

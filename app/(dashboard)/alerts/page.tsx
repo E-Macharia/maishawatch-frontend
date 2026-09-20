@@ -9,8 +9,10 @@ import {
 	CheckCircle2,
 	CircleAlert,
 	Search,
-	X,
 	Send,
+	X,
+	RefreshCw,
+	Radio,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -19,30 +21,25 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/dashboard/pagination";
 import { FilterSelect } from "@/components/dashboard/filter-select";
 import { TableEmptyState } from "@/components/dashboard/table-empty-state";
-import {
-	maishawatchData,
-	getFacilityName,
-	getEquipmentName,
-	facilityById,
-	equipmentById,
-} from "@/lib/data";
 import { AlertResolutionDialog } from "@/components/dashboard/alert-resolution-dialog";
+import { useLiveData } from "@/lib/data/live-context";
+import { useToast } from "@/components/ui/toast-context";
 import { api } from "@/lib/api/backend-client";
+import type { Alert } from "@/types/maishawatch";
 
 const PAGE_SIZE = 8;
 
 export default function AlertsPage() {
+	const { alerts, equipment, isLive, isLoading, refresh, getFacilityName, getEquipmentName } = useLiveData();
+	const { success, error: toastError } = useToast();
 	const [severity, setSeverity] = useState("all");
 	const [type, setType] = useState("all");
 	const [query, setQuery] = useState("");
 	const [resolved, setResolved] = useState<string[]>([]);
 	const [page, setPage] = useState(1);
-	const [selected, setSelected] = useState<
-		(typeof maishawatchData.alerts)[number] | null
-	>(null);
-	const [notify, setNotify] = useState<
-		(typeof maishawatchData.alerts)[number] | null
-	>(null);
+	const [selected, setSelected] = useState<Alert | null>(null);
+	const [notify, setNotify] = useState<Alert | null>(null);
+
 
 	const [notifyEmail, setNotifyEmail] = useState("");
 	const [isSending, setIsSending] = useState(false);
@@ -59,33 +56,40 @@ export default function AlertsPage() {
 
 	const filtered = useMemo(
 		() =>
-			maishawatchData.alerts.filter(
+			alerts.filter(
 				(a) =>
 					!resolved.includes(a.id) &&
 					(severity === "all" || a.severity === severity) &&
 					(type === "all" || a.type === type) &&
 					(!query ||
-						`${getEquipmentName(a.equipmentId)} ${getFacilityName(
+						`${getEquipmentName(a.equipmentId || "")} ${getFacilityName(
 							a.facilityId,
 						)} ${a.message}`
 							.toLowerCase()
 							.includes(query.toLowerCase())),
 			),
-		[severity, type, query, resolved],
+		[alerts, severity, type, query, resolved, getEquipmentName, getFacilityName],
 	);
 
 	const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 	const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-	const critical = maishawatchData.alerts.filter(
+	const critical = alerts.filter(
 		(x) => x.severity === "critical" && !resolved.includes(x.id),
 	).length;
-	const discrepancies = maishawatchData.alerts.filter(
+	const discrepancies = alerts.filter(
 		(x) => x.type === "discrepancy" && !resolved.includes(x.id),
 	).length;
 
 	const resolve = (id: string) => {
-		setResolved((x) => Array.from(new Set([...x, id])));
+		setResolved((x) => {
+			const next = Array.from(new Set([...x, id]));
+			try {
+				localStorage.setItem("maisha-resolved-alerts", JSON.stringify(next));
+			} catch {}
+			return next;
+		});
+		api.alerts.resolve(id).catch(() => {});
 		setSelected(null);
 		setPage(1);
 	};
@@ -97,48 +101,7 @@ export default function AlertsPage() {
 		setPage(1);
 	};
 
-	// --- ✅ Correct notification handler with "body" wrapper ---
-	// const handleSendNotification = async (alert: typeof notify) => {
-	// 	if (!alert) return;
-	// 	if (!notifyEmail.trim()) {
-	// 		setSendError("Please enter a valid email address");
-	// 		return;
-	// 	}
-
-	// 	setIsSending(true);
-	// 	setSendError(null);
-	// 	setSendSuccess(false);
-
-	// 	try {
-	// 		const payload = {
-	// 			body: alert.message, // Email content as a string
-	// 			subject: `Alert: ${getEquipmentName(alert.equipmentId)} - ${alert.type}`,
-	// 			alert_id: alert.id,
-	// 			email: notifyEmail.trim(),
-	// 			facility_name: getFacilityName(alert.facilityId),
-	// 			equipment_name: getEquipmentName(alert.equipmentId),
-	// 			severity: alert.severity,
-	// 		};
-
-	// 		console.log("Sending payload:", payload); // Verify in console
-
-	// 		await api.notifications.send(payload);
-
-	// 		setSendSuccess(true);
-	// 		setTimeout(() => {
-	// 			setNotify(null);
-	// 			setNotifyEmail("");
-	// 			setSendSuccess(false);
-	// 		}, 1500);
-	// 	} catch (err) {
-	// 		setSendError(
-	// 			err instanceof Error ? err.message : "Failed to send notification",
-	// 		);
-	// 	} finally {
-	// 		setIsSending(false);
-	// 	}
-	// };
-	const handleSendNotification = async (alert: typeof notify) => {
+	const handleSendNotification = async (alert: Alert | null) => {
 		if (!alert) return;
 		if (!notifyEmail.trim()) {
 			setSendError("Please enter a valid email address");
@@ -152,17 +115,17 @@ export default function AlertsPage() {
 		try {
 			const payload = {
 				body: alert.message,
-				subject: `Alert: ${getEquipmentName(alert.equipmentId)} - ${alert.type}`,
+				subject: `Alert: ${getEquipmentName(alert.equipmentId || "")} - ${alert.type}`,
 				alert_id: alert.id,
 				email: notifyEmail.trim(),
 				facility_name: getFacilityName(alert.facilityId),
-				equipment_name: getEquipmentName(alert.equipmentId),
+				equipment_name: getEquipmentName(alert.equipmentId || ""),
 				severity: alert.severity,
 			};
 
 			await api.notifications.send(payload);
 
-			// Success
+			success("Notification Dispatched", `Alert sent to ${notifyEmail.trim()} successfully.`);
 			setSendSuccess(true);
 			setTimeout(() => {
 				setNotify(null);
@@ -170,23 +133,22 @@ export default function AlertsPage() {
 				setSendSuccess(false);
 			}, 1500);
 		} catch (err) {
-			// Check if the error is an AbortError (timeout)
 			if (err instanceof DOMException && err.name === "AbortError") {
-				// The email was likely sent, but the request timed out.
-				// Inform the user but treat it as success.
+				success("Notification Dispatched", `Alert sent to ${notifyEmail.trim()} successfully.`);
 				setSendSuccess(true);
 				setSendError(null);
-				// Optionally show a different message: "Notification sent (server confirmation delayed)"
 				setTimeout(() => {
 					setNotify(null);
 					setNotifyEmail("");
 					setSendSuccess(false);
 				}, 1500);
 			} else {
+				toastError("Dispatch Failed", err instanceof Error ? err.message : "Failed to send notification");
 				setSendError(
 					err instanceof Error ? err.message : "Failed to send notification",
 				);
 			}
+
 		} finally {
 			setIsSending(false);
 		}
@@ -200,12 +162,16 @@ export default function AlertsPage() {
 		setIsSending(false);
 	};
 
+	const selectedEquipment = selected?.equipmentId
+		? equipment.find((e) => e.id === selected.equipmentId)
+		: null;
+
 	return (
 		<div className="space-y-6">
-			{selected && (
+			{selected && selectedEquipment && (
 				<AlertResolutionDialog
 					alert={selected}
-					equipment={equipmentById.get(selected.equipmentId)!}
+					equipment={selectedEquipment}
 					onClose={() => setSelected(null)}
 					onResolved={resolve}
 				/>
@@ -227,7 +193,7 @@ export default function AlertsPage() {
 
 						<div className="mt-4 space-y-3">
 							<p className="text-sm text-muted-foreground">
-								<strong>Equipment:</strong> {getEquipmentName(notify.equipmentId)}
+								<strong>Equipment:</strong> {getEquipmentName(notify.equipmentId || "")}
 							</p>
 							<p className="text-sm text-muted-foreground">
 								<strong>Facility:</strong> {getFacilityName(notify.facilityId)}
@@ -290,24 +256,46 @@ export default function AlertsPage() {
 			)}
 
 			<Reveal>
-				<div>
-					<p className="text-[10px] font-bold uppercase tracking-wider text-red-500">
-						Operational Signals
-					</p>
-					<h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-						Alert Centre
-					</h1>
-					<p className="mt-1 max-w-2xl text-xs sm:text-sm text-muted-foreground">
-						Turn risk signals into verified biomedical maintenance actions and
-						auditable hospital notifications.
-					</p>
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+					<div>
+						<div className="flex items-center gap-2">
+							<p className="text-[10px] font-bold uppercase tracking-wider text-red-500">
+								Operational Signals
+							</p>
+							<span
+								className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+									isLive
+										? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+										: "border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+								}`}
+							>
+								<Radio className="h-2.5 w-2.5 animate-pulse" />
+								{isLive ? "Live API Connected" : "Connecting to API..."}
+							</span>
+						</div>
+						<h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+							Alert Centre
+						</h1>
+						<p className="mt-1 max-w-2xl text-xs sm:text-sm text-muted-foreground">
+							Turn risk signals into verified biomedical maintenance actions and
+							auditable hospital notifications in real-time.
+						</p>
+					</div>
+					<button
+						onClick={() => refresh()}
+						disabled={isLoading}
+						className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+					>
+						<RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+						Refresh API Data
+					</button>
 				</div>
 			</Reveal>
 
 			<section className="grid gap-4 sm:grid-cols-3">
 				<MetricCard
 					label="Open Alerts"
-					value={maishawatchData.alerts.length - resolved.length}
+					value={Math.max(0, alerts.length - resolved.length)}
 					hint="Signals requiring intervention"
 					icon={BellRing}
 					tone="amber"
@@ -428,7 +416,7 @@ export default function AlertsPage() {
 										<div className="min-w-0">
 											<div className="flex flex-wrap items-center gap-2">
 												<p className="text-xs font-bold text-foreground">
-													{getEquipmentName(alert.equipmentId)}
+													{getEquipmentName(alert.equipmentId || "")}
 												</p>
 												<span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
 													{alert.type}
@@ -449,12 +437,14 @@ export default function AlertsPage() {
 
 									<div className="flex flex-wrap items-center gap-2 lg:shrink-0">
 										<StatusBadge level={alert.severity} />
-										<Link
-											href={`/equipment/${alert.equipmentId}`}
-											className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shadow-xs"
-										>
-											Inspect <ArrowUpRight className="h-3 w-3" />
-										</Link>
+										{alert.equipmentId && (
+											<Link
+												href={`/equipment/${alert.equipmentId}`}
+												className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shadow-xs"
+											>
+												Inspect <ArrowUpRight className="h-3 w-3" />
+											</Link>
+										)}
 										<button
 											onClick={() => setNotify(alert)}
 											className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-3 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors shadow-xs cursor-pointer"

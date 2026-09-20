@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Menu, Search, ChevronRight, Command, X } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
-import { maishawatchData } from "@/lib/data";
+import { useLiveData } from "@/lib/data/live-context";
 import { NotificationsPopover } from "./notifications-popover";
 import { ThemeToggle } from "./theme-toggle";
 import { AdminUserMenu } from "@/components/auth/admin-user-menu";
@@ -14,6 +14,8 @@ export default function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { toggleMobileSidebar } = useSidebar();
+  const { equipment, facilities, autoRefresh, setAutoRefresh } = useLiveData();
+
   const [q, setQ] = useState("");
   const [focused, setFocused] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -33,14 +35,14 @@ export default function Topbar() {
     const term = q.trim().toLowerCase();
     if (!term) return [];
     const items = [
-      ...maishawatchData.equipment.map((item) => ({
+      ...equipment.map((item) => ({
         id: item.id,
         title: item.name,
-        subtitle: `${maishawatchData.facilities.find((f) => f.id === item.facilityId)?.name ?? "Unknown facility"} · ${item.serialNumber}`,
+        subtitle: `${facilities.find((f) => f.id === item.facilityId)?.name ?? "Unknown facility"} · ${item.serialNumber}`,
         href: `/equipment/${item.id}`,
         kind: "Equipment",
       })),
-      ...maishawatchData.facilities.map((facility) => ({
+      ...facilities.map((facility) => ({
         id: facility.id,
         title: facility.name,
         subtitle: `${facility.county} · Level ${facility.serviceLevel}`,
@@ -49,7 +51,8 @@ export default function Topbar() {
       })),
     ];
     return items.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(term)).slice(0, 7);
-  }, [q]);
+  }, [q, equipment, facilities]);
+
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -226,18 +229,40 @@ export default function Topbar() {
         <AdminUserMenu />
         <ThemeToggle />
         <NotificationsPopover />
+        {/* Auto-Refresh & Live Network Facility Count Indicator */}
 
-        {/* Network Facility Count Indicator */}
         <div className="hidden items-center gap-2.5 border-l border-border pl-3 sm:flex">
-          <div className="text-right">
-            <p className="text-[13px] font-semibold text-foreground">Kenya network</p>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-              {maishawatchData.facilities.length} facilities
-            </p>
-          </div>
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+          <button
+            onClick={() => {
+              setAutoRefresh(!autoRefresh);
+            }}
+            title={autoRefresh ? "Live polling active (30s). Click to pause." : "Live polling paused. Click to enable auto-refresh."}
+            className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2.5 py-1 text-left transition hover:bg-accent"
+          >
+            <span
+              className={`relative flex h-2 w-2 items-center justify-center`}
+            >
+              {autoRefresh && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              )}
+              <span
+                className={`relative inline-flex h-2 w-2 rounded-full ${
+                  autoRefresh ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-muted-foreground/50"
+                }`}
+              />
+            </span>
+            <div className="text-right">
+              <p className="text-[11px] font-bold text-foreground leading-none">
+                {autoRefresh ? "Live Feed" : "Paused"}
+              </p>
+              <p className="text-[9px] font-semibold text-muted-foreground uppercase">
+                {facilities.length > 0 ? `${facilities.length} facilities` : "129 facilities"}
+              </p>
+            </div>
+          </button>
         </div>
       </div>
     </header>
   );
 }
+
