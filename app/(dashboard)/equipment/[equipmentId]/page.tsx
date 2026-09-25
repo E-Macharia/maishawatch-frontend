@@ -1,6 +1,8 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { use } from "react";
 import Link from "next/link";
-import { ArrowLeft, CircleAlert, Wrench } from "lucide-react";
+import { ArrowLeft, CircleAlert, Wrench, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Reveal } from "@/components/dashboard/motion";
@@ -9,10 +11,8 @@ import { TelemetryInsights } from "@/components/dashboard/telemetry-insights";
 import { TechnicianLog } from "@/components/dashboard/technician-log";
 import { EquipmentActions } from "@/components/dashboard/equipment-actions";
 import { PredictionPanel } from "@/components/dashboard/prediction-panel";
+import { useLiveData } from "@/lib/data/live-context";
 import {
-	getEquipmentById,
-	getAlertsForEquipment,
-	getFacilityById,
 	getEquipmentTrend,
 	formatEquipmentType,
 	getEquipmentHealthScore,
@@ -20,19 +20,61 @@ import {
 	getFailureSummary,
 } from "@/lib/data/insights";
 
-export default async function EquipmentDetailPage({
+export default function EquipmentDetailPage({
 	params,
 }: {
 	params: Promise<{ equipmentId: string }>;
 }) {
-	const { equipmentId } = await params;
-	const found = getEquipmentById(equipmentId);
-	if (!found) notFound();
-	const item = found;
-	const facility = getFacilityById(item.facilityId);
-	const alerts = getAlertsForEquipment(item.id);
-	if (!facility) notFound();
-	const trend = getEquipmentTrend(item);
+	const { equipmentId } = use(params);
+	const { getEquipmentById, getFacilityById, getAlertsForEquipment, isLoading } = useLiveData();
+	const item = getEquipmentById(equipmentId);
+	const facility = item ? getFacilityById(item.facilityId) : undefined;
+	const alerts = item ? getAlertsForEquipment(item.id) : [];
+	const trend = item ? getEquipmentTrend(item) : [];
+
+	const resolvedFacility: import("@/types/maishawatch").Facility = facility || {
+		id: item?.facilityId || "10083",
+		name: "Healthcare Facility",
+		county: "Kenya",
+		serviceLevel: "Level 4",
+		facilityType: "Hospital",
+		department: item?.department || "Clinical Unit",
+		beds: 0,
+		cots: 0,
+		bedsAndCots: 0,
+		operationStatus: "Operational",
+		latitude: -1.2864,
+		longitude: 36.8172,
+		subCounty: "",
+		ward: "",
+	};
+
+	if (isLoading && !item) {
+		return (
+			<div className="flex min-h-[400px] flex-col items-center justify-center gap-3">
+				<Loader2 className="h-8 w-8 animate-spin text-primary" />
+				<p className="text-sm font-medium text-muted-foreground">Loading asset intelligence...</p>
+			</div>
+		);
+	}
+
+	if (!item) {
+		return (
+			<div className="space-y-6">
+				<Link
+					href="/equipment"
+					className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+				>
+					<ArrowLeft className="h-3.5 w-3.5" /> Back to equipment
+				</Link>
+				<Card className="p-8 text-center border-border">
+					<CircleAlert className="mx-auto h-10 w-10 text-amber-500 mb-3" />
+					<h2 className="text-lg font-bold text-foreground">Equipment Not Found</h2>
+					<p className="text-xs text-muted-foreground mt-1">Asset with ID {equipmentId} was not found in the live backend system.</p>
+				</Card>
+			</div>
+		);
+	}
 
 	return (
 		<div className="space-y-6">
@@ -56,16 +98,17 @@ export default async function EquipmentDetailPage({
 							{item.name}
 						</h1>
 						<p className="mt-1 text-xs sm:text-sm text-muted-foreground font-medium">
-							{facility?.name} • {facility?.county} •{" "}
+							{resolvedFacility.name} • {resolvedFacility.county} •{" "}
 							<span className="font-mono">{item.serialNumber}</span>
 						</p>
 					</div>
 					<div className="flex flex-wrap items-end gap-3">
 						<EquipmentActions
 							equipment={item}
-							facility={facility}
+							facility={resolvedFacility}
 							alert={alerts[0]}
 						/>
+
 						<div className="rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-3.5 shadow-xs">
 							<p className="text-[10px] font-bold uppercase tracking-wider text-red-500">
 								Predicted Failure Window

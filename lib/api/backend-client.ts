@@ -1,6 +1,6 @@
 import type { Equipment, Facility, Alert } from "@/types/maishawatch";
 
-const API_BASE = (
+export const API_BASE = (
 	process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL ||
 	process.env.NEXT_PUBLIC_BACKEND_URL ||
 	process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -8,7 +8,7 @@ const API_BASE = (
 	"https://maishawatch-backend.onrender.com"
 ).replace(/\/$/, "");
 
-const TOKEN_KEY = "maishawatch_access_token";
+export const TOKEN_KEY = "maishawatch_access_token";
 
 export function getAuthHeaders(): Record<string, string> {
 	const headers: Record<string, string> = {
@@ -16,20 +16,36 @@ export function getAuthHeaders(): Record<string, string> {
 		"Content-Type": "application/json",
 	};
 	if (typeof window !== "undefined") {
-		const token = localStorage.getItem(TOKEN_KEY);
-		if (token) headers.Authorization = `Bearer ${token}`;
+		try {
+			const token = localStorage.getItem(TOKEN_KEY);
+			if (token) headers.Authorization = `Bearer ${token}`;
+		} catch {
+			// Ignore localStorage access errors
+		}
 	}
 	return headers;
+}
+
+export class ApiError extends Error {
+	status: number;
+	data: unknown;
+	constructor(message: string, status: number, data?: unknown) {
+		super(message);
+		this.name = "ApiError";
+		this.status = status;
+		this.data = data;
+	}
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), 35000); // 35s to handle Render free-tier cold starts
 	try {
+		const headers = { ...getAuthHeaders(), ...(init.headers || {}) };
 		const response = await fetch(`${API_BASE}${path}`, {
 			...init,
 			cache: "no-store",
-			headers: { ...getAuthHeaders(), ...(init.headers || {}) },
+			headers,
 			signal: controller.signal,
 		});
 		const text = await response.text();
@@ -44,7 +60,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 				typeof payload === "object" && payload && "detail" in payload
 					? String((payload as { detail: unknown }).detail)
 					: response.statusText;
-			throw new Error(`${response.status}: ${detail}`);
+			throw new ApiError(
+				`${response.status}: ${detail}`,
+				response.status,
+				payload,
+			);
 		}
 		return payload as T;
 	} finally {
@@ -70,23 +90,41 @@ export const api = {
 
 	auth: {
 		login: (email: string, password: string) =>
-			request<any>("/auth/login", {
+			request<{
+				access_token?: string;
+				token_type?: string;
+				user?: any;
+				requires_otp?: boolean;
+				is_first_time?: boolean;
+				message?: string;
+				email?: string;
+				otp_for_debug?: string;
+			}>("/auth/login", {
 				method: "POST",
-				body: JSON.stringify({ email, password }),
+				body: JSON.stringify({ email: email.trim(), password }),
 			}),
 		token: (username: string, password: string) => {
-			const body = new URLSearchParams({ username, password });
-			return request<any>("/auth/token", {
-				method: "POST",
-				headers: { "Content-Type": "application/x-www-form-urlencoded" },
-				body: body.toString(),
+			const body = new URLSearchParams({
+				username: username.trim(),
+				password,
 			});
+			return request<{ access_token: string; token_type: string }>(
+				"/auth/token",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/x-www-form-urlencoded" },
+					body: body.toString(),
+				},
+			);
 		},
 		verifyOtp: (email: string, otp: string) =>
-			request<any>("/auth/verify-otp", {
-				method: "POST",
-				body: JSON.stringify({ email, otp }),
-			}),
+			request<{ access_token: string; token_type: string; user: any }>(
+				"/auth/verify-otp",
+				{
+					method: "POST",
+					body: JSON.stringify({ email: email.trim(), otp: otp.trim() }),
+				},
+			),
 		changeTempPassword: (payload: {
 			email: string;
 			temp_password: string;
@@ -100,7 +138,7 @@ export const api = {
 		forgotPassword: (email: string) =>
 			request<any>("/auth/forgot-password", {
 				method: "POST",
-				body: JSON.stringify({ email }),
+				body: JSON.stringify({ email: email.trim() }),
 			}),
 		resetPassword: (payload: {
 			email: string;
@@ -125,7 +163,25 @@ export const api = {
 		logout: () => request<any>("/auth/logout", { method: "POST" }),
 	},
 
-	dashboard: { summary: () => request<any>("/dashboard/summary") },
+	dashboard: {
+		summary: () =>
+			request<{
+				total_equipment: number;
+				total_facilities: number;
+				open_alerts: number;
+				critical_alerts: number;
+				pending_maintenance: number;
+				operational_equipment: number;
+				maintenance_mode_equipment: number;
+				decommissioned_equipment: number;
+				recent_alerts_count: number;
+				role: string;
+				scope_type: string;
+				scope_id: string | null;
+				generated_at: string;
+			}>("/dashboard/summary"),
+		analyticsSummary: () => request<any>("/analytics/summary"),
+	},
 
 	equipment: {
 		list: (
@@ -281,7 +337,16 @@ export const api = {
 				`/alerts/equipment/${encodeURIComponent(id)}${qs({ limit })}`,
 			),
 		get: (id: string) => request<any>(`/alerts/${encodeURIComponent(id)}`),
-		create: (payload: Record<string, unknown>) =>
+		create: (payload: {
+			alert_type: string;
+			severity: string;
+			title: string;
+			message: string;
+			recommendation?: string;
+			equipment_id?: string;
+			facility_id?: string;
+			status?: string;
+		}) =>
 			request<any>("/alerts", { method: "POST", body: JSON.stringify(payload) }),
 		replace: (id: string, payload: Record<string, unknown>) =>
 			request<any>(`/alerts/${encodeURIComponent(id)}`, {
@@ -303,7 +368,7 @@ export const api = {
 			}),
 		close: (id: string) =>
 			request<any>(`/alerts/${encodeURIComponent(id)}/close`, { method: "PATCH" }),
-		bulk: (payload: Record<string, unknown>) =>
+		bulk: (payload: { alert_ids: string[]; action: string }) =>
 			request<any>("/alerts/bulk", {
 				method: "POST",
 				body: JSON.stringify(payload),
@@ -320,28 +385,86 @@ export const api = {
 	},
 
 	predictions: {
-		failure24h: (payload: Record<string, unknown>) =>
-			request<any>("/predict/failure/24h", {
+		failure24h: (payload: { equipment_id: string }) =>
+			request<{
+				equipment_id: string;
+				equipment_type: string;
+				horizon: string;
+				failure_probability: number;
+				severity: string;
+				status: string;
+				recommendation: string;
+				timestamp: string;
+				has_telemetry: boolean;
+				telemetry_count: number;
+			}>("/predict/failure/24h", {
 				method: "POST",
 				body: JSON.stringify(payload),
 			}),
-		failure72h: (payload: Record<string, unknown>) =>
-			request<any>("/predict/failure/72h", {
+		failure72h: (payload: { equipment_id: string }) =>
+			request<{
+				equipment_id: string;
+				equipment_type: string;
+				horizon: string;
+				failure_probability: number;
+				severity: string;
+				status: string;
+				recommendation: string;
+				timestamp: string;
+				has_telemetry: boolean;
+				telemetry_count: number;
+			}>("/predict/failure/72h", {
 				method: "POST",
 				body: JSON.stringify(payload),
 			}),
-		failure168h: (payload: Record<string, unknown>) =>
-			request<any>("/predict/failure/168h", {
+		failure168h: (payload: { equipment_id: string }) =>
+			request<{
+				equipment_id: string;
+				equipment_type: string;
+				horizon: string;
+				failure_probability: number;
+				severity: string;
+				status: string;
+				recommendation: string;
+				timestamp: string;
+				has_telemetry: boolean;
+				telemetry_count: number;
+			}>("/predict/failure/168h", {
 				method: "POST",
 				body: JSON.stringify(payload),
 			}),
-		failureAll: (payload: Record<string, unknown>) =>
-			request<any>("/predict/failure/all", {
+		failureAll: (payload: { equipment_id: string; [key: string]: unknown }) =>
+			request<{
+				equipment_id: string;
+				equipment_type: string;
+				timestamp: string;
+				predictions: {
+					"24h"?: { probability: number; severity: string; status: string };
+					"72h"?: { probability: number; severity: string; status: string };
+					"168h"?: { probability: number; severity: string; status: string };
+					[key: string]: any;
+				};
+				overall_severity: string;
+				recommendation: string;
+				overall_status: string;
+				max_probability: number;
+			}>("/predict/failure/all", {
 				method: "POST",
-				body: JSON.stringify(payload),
+				body: JSON.stringify({ equipment_id: payload.equipment_id }),
 			}),
-		rul: (payload: Record<string, unknown>) =>
-			request<any>("/predict/rul", {
+		rul: (payload: { equipment_id: string }) =>
+			request<{
+				equipment_id: string;
+				equipment_type: string;
+				rul_hours: number;
+				rul_days: number;
+				severity: string;
+				status: string;
+				recommendation: string;
+				confidence_score: number | null;
+				timestamp: string;
+				based_on: string;
+			}>("/predict/rul", {
 				method: "POST",
 				body: JSON.stringify(payload),
 			}),
@@ -389,9 +512,25 @@ export const api = {
 
 	users: {
 		list: () => request<any[]>("/users"),
-		create: (payload: Record<string, unknown>) =>
+		create: (payload: {
+			name: string;
+			email: string;
+			password: string;
+			role: string;
+			scope_type?: string;
+			scope_id?: string | null;
+		}) =>
 			request<any>("/users", { method: "POST", body: JSON.stringify(payload) }),
-		update: (id: string, payload: Record<string, unknown>) =>
+		update: (
+			id: string,
+			payload: {
+				name?: string;
+				role?: string;
+				scope_type?: string;
+				scope_id?: string | null;
+				active?: boolean;
+			},
+		) =>
 			request<any>(`/users/${encodeURIComponent(id)}`, {
 				method: "PATCH",
 				body: JSON.stringify(payload),
@@ -407,7 +546,13 @@ export const api = {
 		read: (id: number) =>
 			request<any>(`/notifications/${id}/read`, { method: "PATCH" }),
 		readAll: () => request<any>("/notifications/read-all", { method: "PATCH" }),
-		send: (payload: Record<string, unknown>) =>
+		send: (payload: {
+			subject: string;
+			body: string;
+			role?: string | null;
+			user_ids?: string[];
+			send_email_now?: boolean;
+		}) =>
 			request<any>("/notifications/send", {
 				method: "POST",
 				body: JSON.stringify(payload),
@@ -419,14 +564,7 @@ export const api = {
 		stats: () => request<any>("/notifications/stats"),
 	},
 
-	profile: {
-		get: () => request<any>("/profile"),
-		update: (name: string) =>
-			request<any>(`/profile${qs({ name })}`, { method: "PATCH" }),
-	},
-
 	audit: { list: () => request<any[]>("/audit") },
-	recommendations: { get: () => request<any>("/recommendations") },
 
 	chat: {
 		send: (
@@ -434,7 +572,14 @@ export const api = {
 			conversation_id?: string,
 			context: Record<string, unknown> = {},
 		) =>
-			request<any>("/chat", {
+			request<{
+				response: string;
+				action?: string | null;
+				data?: Record<string, unknown> | null;
+				suggestions?: string[];
+				conversation_id: string;
+				timestamp: string;
+			}>("/chat", {
 				method: "POST",
 				body: JSON.stringify({ message, conversation_id, context }),
 			}),
@@ -448,7 +593,8 @@ export const api = {
 			request<any>(`/chat/conversations/${encodeURIComponent(id)}`, {
 				method: "DELETE",
 			}),
-		suggestions: () => request<any>("/chat/suggestions"),
+		suggestions: () =>
+			request<{ suggestions: string[] } | string[]>("/chat/suggestions"),
 		exportConversation: (id: string, format = "json") =>
 			request<any>(
 				`/chat/conversations/${encodeURIComponent(id)}/export${qs({ format })}`,
@@ -456,32 +602,41 @@ export const api = {
 	},
 };
 
-// Backwards-compatible helpers used by existing components.
+// Backwards-compatible domain helpers
 export async function fetchEquipmentList(params?: {
 	q?: string;
 	county?: string;
 	risk?: string;
 	type?: string;
+	facilityId?: string;
 }): Promise<Equipment[]> {
-	const rows = await api.equipment.list({
-		search: params?.q,
-		equipment_type: params?.type,
-	});
-	return rows as Equipment[];
+	try {
+		const rows = await api.equipment.list({
+			search: params?.q,
+			equipment_type: params?.type,
+			facility_id: params?.facilityId,
+		});
+		return rows as Equipment[];
+	} catch (error) {
+		console.warn("fetchEquipmentList failed, returning empty list", error);
+		return [];
+	}
 }
+
 export async function fetchEquipmentById(
 	id: string,
 ): Promise<{ data: Equipment; facility: Facility | null } | null> {
 	try {
 		const result = await api.equipment.detail(id);
 		return {
-			data: result.equipment as Equipment,
+			data: (result.equipment || result) as Equipment,
 			facility: (result.facility ?? null) as Facility | null,
 		};
 	} catch {
 		return null;
 	}
 }
+
 export async function fetchFacilities(params?: {
 	q?: string;
 	county?: string;
@@ -492,31 +647,48 @@ export async function fetchFacilities(params?: {
 	pageSize: number;
 	items: Facility[];
 }> {
-	const items = await api.facilities.list({
-		name: params?.q,
-		county: params?.county,
-		keph_level: params?.kephLevel,
-	});
-	return {
-		total: items.length,
-		page: 1,
-		pageSize: items.length,
-		items: items as Facility[],
-	};
+	try {
+		const items = await api.facilities.list({
+			name: params?.q,
+			county: params?.county,
+			keph_level: params?.kephLevel,
+		});
+		return {
+			total: items.length,
+			page: 1,
+			pageSize: items.length,
+			items: items as Facility[],
+		};
+	} catch (error) {
+		console.warn("fetchFacilities failed, returning empty list", error);
+		return {
+			total: 0,
+			page: 1,
+			pageSize: 0,
+			items: [],
+		};
+	}
 }
+
 export async function fetchAlerts(params?: {
 	severity?: string;
 	type?: string;
 	includeAcknowledged?: boolean;
 }): Promise<Alert[]> {
-	const result = await api.alerts.list({ severity: params?.severity });
-	return (
-		Array.isArray(result) ? result : (result.items ?? result.alerts ?? [])
-	) as Alert[];
+	try {
+		const result = await api.alerts.list({ severity: params?.severity });
+		return (
+			Array.isArray(result) ? result : (result.items ?? result.alerts ?? [])
+		) as Alert[];
+	} catch (error) {
+		console.warn("fetchAlerts failed, returning empty list", error);
+		return [];
+	}
 }
+
 export async function fetchAnalyticsSummary(): Promise<any> {
 	try {
-		const res = await api.dashboard.summary();
+		const res: any = await api.dashboard.summary();
 		if (res) {
 			return {
 				totalEquipment: res.total_equipment ?? res.totalEquipment ?? 150,
@@ -539,29 +711,41 @@ export async function fetchAnalyticsSummary(): Promise<any> {
 		pendingMaintenance: 12,
 	};
 }
+
 export async function acknowledgeAlert(alertId: string): Promise<any> {
 	return api.alerts.acknowledge(alertId);
 }
+
 export async function predictEquipmentRul(
-	payload: Record<string, unknown>,
+	payload: { equipment_id: string } | Record<string, unknown>,
 ): Promise<any> {
-	return api.predictions.rul(payload);
+	return api.predictions.rul(payload as { equipment_id: string });
 }
+
 export async function submitMaintenanceRecord(payload: {
-	equipmentId: string;
-	type: "preventive" | "inspection" | "corrective";
-	notes: string;
+	equipmentId?: string;
+	equipment_id?: string;
+	type?: string;
+	title?: string;
+	notes?: string;
 	technician?: string;
 	actionPerformed?: string;
+	priority?: string;
 	durationHours?: number;
 	partsCost?: number;
 	downtimeHours?: number;
 }): Promise<any> {
+	const eqId = payload.equipment_id || payload.equipmentId || "";
 	return api.maintenance.createWorkOrder({
-		equipment_id: payload.equipmentId,
-		title: `${payload.type.toUpperCase()} Maintenance: ${payload.actionPerformed || "Log Entry"}`,
-		description: payload.notes,
-		assigned_to: payload.technician,
-		priority: payload.type === "corrective" ? "high" : "medium",
+		equipment_id: eqId,
+		title:
+			payload.title ||
+			`${(payload.type || "Maintenance").toUpperCase()}: ${payload.actionPerformed || "Log Entry"}`,
+		description:
+			payload.notes || payload.actionPerformed || "Maintenance recorded",
+		priority: payload.priority || (payload.type === "corrective" ? "high" : "medium"),
+		assigned_to: payload.technician || undefined,
+		scheduled_at: new Date().toISOString(),
 	});
 }
+

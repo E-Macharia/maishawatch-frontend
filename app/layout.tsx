@@ -4,29 +4,53 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ChatbotDrawer } from "@/components/chat/chatbot-drawer";
 import { AuthProvider } from "@/lib/auth/auth-context";
+import { LiveDataProvider } from "@/lib/data/live-context";
 import { AdminLoginModal } from "@/components/auth/admin-login-modal";
 
-const plusJakartaSans = Plus_Jakarta_Sans({ variable: "--font-sans", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
-const jetbrainsMono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"], weight: ["400", "500"] });
+const plusJakartaSans = Plus_Jakarta_Sans({
+	variable: "--font-sans",
+	subsets: ["latin"],
+	weight: ["400", "500", "600", "700"],
+});
+const jetbrainsMono = JetBrains_Mono({
+	variable: "--font-mono",
+	subsets: ["latin"],
+	weight: ["400", "500"],
+});
 
 export const metadata: Metadata = {
-  title: "MaishaWatch — Equipment Intelligence",
-  description: "Medical equipment utilization and maintenance risk monitoring for Kenyan county hospitals.",
+	title: "MaishaWatch — Equipment Intelligence",
+	description:
+		"Medical equipment utilization and maintenance risk monitoring for Kenyan county hospitals.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" suppressHydrationWarning className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} h-full antialiased`}>
-      <body>
-        <ThemeProvider>
-          <AuthProvider>
-            {children}
-            <AdminLoginModal />
-            <ChatbotDrawer />
-          </AuthProvider>
-        </ThemeProvider>
-      </body>
-    </html>
-  );
+import { ToastProvider } from "@/components/ui/toast-context";
+
+export default function RootLayout({
+	children,
+}: {
+	children: React.ReactNode;
+}) {
+	return (
+		<html
+			lang="en"
+			suppressHydrationWarning
+			className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
+		>
+			<body>
+				<ThemeProvider>
+					<AuthProvider>
+						<LiveDataProvider>
+							<ToastProvider>
+								{children}
+								<AdminLoginModal />
+								<ChatbotDrawer />
+							</ToastProvider>
+						</LiveDataProvider>
+					</AuthProvider>
+				</ThemeProvider>
+			</body>
+		</html>
+	);
 }
 

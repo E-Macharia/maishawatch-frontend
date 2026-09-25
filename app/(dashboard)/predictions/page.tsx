@@ -11,6 +11,8 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  RefreshCw,
+  Radio,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -19,25 +21,58 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/dashboard/pagination";
 import { FilterSelect } from "@/components/dashboard/filter-select";
 import { TableEmptyState } from "@/components/dashboard/table-empty-state";
-import { getFacilityName } from "@/lib/data";
-import {
-  getPredictiveEquipmentList,
-  getPredictiveSummary,
-} from "@/lib/data/prediction-helpers";
+import { useLiveData } from "@/lib/data/live-context";
+import { getPredictionView } from "@/lib/data/prediction-helpers";
 import { PredictionPanel } from "@/components/dashboard/prediction-panel";
 import type { RiskLevel } from "@/types/maishawatch";
 
 const PAGE_SIZE = 8;
 
 export default function PredictionsPage() {
+  const { equipment, isLive, isLoading, refresh, getFacilityName } = useLiveData();
   const [level, setLevel] = useState("all");
   const [source, setSource] = useState("all");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const summary = useMemo(() => getPredictiveSummary(), []);
-  const all = useMemo(() => getPredictiveEquipmentList(), []);
+  const all = useMemo(() => {
+    return equipment
+      .map((item) => ({
+        equipment: item,
+        view: getPredictionView(item),
+      }))
+      .sort((a, b) => b.view.maxProb - a.view.maxProb);
+  }, [equipment]);
+
+  const summary = useMemo(() => {
+    let critical = 0;
+    let high = 0;
+    let medium = 0;
+    let low = 0;
+    let modelCount = 0;
+    let telemetryCount = 0;
+
+    for (const { view } of all) {
+      if (view.level === "critical") critical++;
+      else if (view.level === "high") high++;
+      else if (view.level === "medium") medium++;
+      else low++;
+
+      if (view.source === "model") modelCount++;
+      else telemetryCount++;
+    }
+
+    return {
+      total: all.length,
+      critical,
+      high,
+      medium,
+      low,
+      modelCount,
+      telemetryCount,
+    };
+  }, [all]);
 
   const filtered = useMemo(() => {
     return all.filter(({ equipment, view }) => {
@@ -50,7 +85,7 @@ export default function PredictionsPage() {
       }
       return true;
     });
-  }, [all, level, source, q]);
+  }, [all, level, source, q, getFacilityName]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -67,16 +102,34 @@ export default function PredictionsPage() {
               <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                 AI Predictions
               </h1>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  isLive
+                    ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                }`}
+              >
+                <Radio className="h-2.5 w-2.5 animate-pulse" />
+                {isLive ? "Live ML API Connected" : "Connecting to API..."}
+              </span>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Failure probability across 24h / 72h / 7-day horizons. Model
-              output when available, telemetry fallback otherwise.
+              Failure probability across 24h / 72h / 7-day horizons. Live model output from backend /predict API.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
-            {summary.modelCount} model-backed · {summary.telemetryCount}{" "}
-            fallback
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+              {summary.modelCount} model-backed · {summary.telemetryCount} fallback
+            </div>
+            <button
+              onClick={() => refresh()}
+              disabled={isLoading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
           </div>
         </div>
       </Reveal>
@@ -141,7 +194,6 @@ export default function PredictionsPage() {
                     />
                   </div>
                   <FilterSelect
-                    label="Risk level"
                     value={level}
                     onChange={(v) => {
                       setLevel(v);
@@ -156,7 +208,6 @@ export default function PredictionsPage() {
                     ]}
                   />
                   <FilterSelect
-                    label="Source"
                     value={source}
                     onChange={(v) => {
                       setSource(v);
