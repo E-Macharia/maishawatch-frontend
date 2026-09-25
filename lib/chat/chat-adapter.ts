@@ -1,6 +1,6 @@
 // lib/chat/chat-adapter.ts
 import { api } from "@/lib/api/backend-client";
-import type { ChatMessage } from "@/types/chat";
+import type { ChatMessage, NavigationAction } from "@/types/chat";
 
 export interface ChatAdapter {
 	sendMessage: (text: string, history: ChatMessage[]) => Promise<ChatMessage>;
@@ -24,17 +24,31 @@ class BackendChatAdapter implements ChatAdapter {
 			}
 
       // Format response
+      let navigationAction: NavigationAction | undefined = undefined;
+      if (response.action) {
+        if (typeof response.action === "string") {
+          navigationAction = {
+            label: "View Details",
+            path: response.action.startsWith("/") ? response.action : `/${response.action}`,
+            autoNavigate: false,
+          };
+        } else if (typeof response.action === "object") {
+          const act = response.action as Record<string, any>;
+          navigationAction = {
+            label: act.label || "View Details",
+            path: act.path || "",
+            autoNavigate: Boolean(act.autoNavigate),
+          };
+        }
+      }
+
       return {
         id: `assistant-${Date.now()}`,
         role: "assistant",
         content: response.response,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         suggestedPrompts: response.suggestions || [],
-        navigationAction: response.action ? {
-          label: response.action.label || "View Details",
-          autoNavigate: false,
-          path: response.action.path || "",
-        } : undefined,
+        navigationAction,
       };
     } catch (error) {
       console.error("Backend chat error:", error);

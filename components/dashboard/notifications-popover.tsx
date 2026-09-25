@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bell, CheckCheck, ExternalLink, X, Radio } from "lucide-react";
-import { maishawatchData, getEquipmentName, getFacilityName } from "@/lib/data";
+import { useLiveData } from "@/lib/data";
 import { api } from "@/lib/api/backend-client";
+import type { Alert } from "@/types/maishawatch";
 
 interface LiveNotification {
   id: number | string;
@@ -67,8 +68,8 @@ export function NotificationsPopover() {
 
   // Fallback / standard alert signals
   const fallbackAlerts = useMemo(
-    () => maishawatchData.alerts.filter((a) => a.severity === "critical" || a.severity === "high").slice(0, 6),
-    []
+    () => (liveAlerts || []).filter((a: Alert) => a.severity === "critical" || a.severity === "high").slice(0, 6),
+    [liveAlerts]
   );
 
   // Active items to display
@@ -85,7 +86,7 @@ export function NotificationsPopover() {
       }));
     }
 
-    return fallbackAlerts.map((a) => ({
+    return fallbackAlerts.map((a: Alert) => ({
       id: a.id,
       title: getEquipmentName(a.equipmentId),
       message: a.message,
@@ -94,14 +95,14 @@ export function NotificationsPopover() {
       facilityId: a.facilityId,
       isUnread: !read.includes(a.id),
     }));
-  }, [liveNotifications, fallbackAlerts, read]);
+  }, [liveNotifications, fallbackAlerts, read, getEquipmentName]);
 
   const effectiveUnreadCount = liveNotifications.length > 0
-    ? (unreadCount || displayItems.filter((i) => i.isUnread).length)
-    : displayItems.filter((i) => i.isUnread).length;
+    ? (unreadCount || displayItems.filter((i: { isUnread: boolean }) => i.isUnread).length)
+    : displayItems.filter((i: { isUnread: boolean }) => i.isUnread).length;
 
   const markAll = async () => {
-    const ids = displayItems.map((a) => a.id);
+    const ids = displayItems.map((a: { id: string }) => a.id);
     setRead(ids);
     setUnreadCount(0);
     localStorage.setItem("maisha-notification-read", JSON.stringify(ids));
@@ -180,7 +181,7 @@ export function NotificationsPopover() {
                 No active notifications
               </div>
             ) : (
-              displayItems.map((item) => (
+              displayItems.map((item: any) => (
                 <div
                   key={item.id}
                   className={`px-4 py-3 transition-colors ${

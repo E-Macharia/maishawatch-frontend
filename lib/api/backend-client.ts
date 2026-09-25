@@ -688,7 +688,7 @@ export async function fetchAlerts(params?: {
 
 export async function fetchAnalyticsSummary(): Promise<any> {
 	try {
-		const res = await api.dashboard.summary();
+		const res: any = await api.dashboard.summary();
 		if (res) {
 			return {
 				totalEquipment: res.total_equipment ?? res.totalEquipment ?? 150,
@@ -740,29 +740,12 @@ export async function submitMaintenanceRecord(payload: {
 		equipment_id: eqId,
 		title:
 			payload.title ||
-			`Maintenance (${payload.type || "Routine"}) by ${payload.technician || "Technician"}`,
+			`${(payload.type || "Maintenance").toUpperCase()}: ${payload.actionPerformed || "Log Entry"}`,
 		description:
 			payload.notes || payload.actionPerformed || "Maintenance recorded",
-		priority: payload.priority || "MEDIUM",
+		priority: payload.priority || (payload.type === "corrective" ? "high" : "medium"),
 		assigned_to: payload.technician || undefined,
 		scheduled_at: new Date().toISOString(),
 	});
 }
-export async function submitMaintenanceRecord(payload: {
-	equipmentId: string;
-	type: "preventive" | "inspection" | "corrective";
-	notes: string;
-	technician?: string;
-	actionPerformed?: string;
-	durationHours?: number;
-	partsCost?: number;
-	downtimeHours?: number;
-}): Promise<any> {
-	return api.maintenance.createWorkOrder({
-		equipment_id: payload.equipmentId,
-		title: `${payload.type.toUpperCase()} Maintenance: ${payload.actionPerformed || "Log Entry"}`,
-		description: payload.notes,
-		assigned_to: payload.technician,
-		priority: payload.type === "corrective" ? "high" : "medium",
-	});
-}
+
