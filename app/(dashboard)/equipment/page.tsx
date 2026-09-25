@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, ArrowUpRight, Gauge, Search, SlidersHorizontal, X } from "lucide-react";
-import { maishawatchData, getFacilityName } from "@/lib/data";
-import { formatEquipmentType, getRiskPortfolio, getTypeBreakdown } from "@/lib/data/insights";
+import { Activity, ArrowUpRight, Gauge, Search, SlidersHorizontal, X, RefreshCw, Radio } from "lucide-react";
+import { useLiveData } from "@/lib/data/live-context";
+import { formatEquipmentType } from "@/lib/data/insights";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,10 +13,13 @@ import { Pagination } from "@/components/dashboard/pagination";
 import { FilterSelect } from "@/components/dashboard/filter-select";
 import { RiskBars, RiskDonut } from "@/components/dashboard/charts";
 import { TableEmptyState } from "@/components/dashboard/table-empty-state";
+import { EquipmentOnboardModal } from "@/components/dashboard/equipment-onboard-modal";
+
 
 const PAGE_SIZE = 12;
 
 export default function EquipmentPage() {
+  const { equipment, facilities, isLive, isLoading, refresh, getFacilityName } = useLiveData();
   const [query, setQuery] = useState("");
   const [risk, setRisk] = useState("all");
   const [type, setType] = useState("all");
@@ -29,13 +32,13 @@ export default function EquipmentPage() {
     if (incoming) setQuery(incoming);
   }, []);
 
-  const counties = useMemo(() => [...new Set(maishawatchData.facilities.map((f) => f.county))].sort(), []);
+  const counties = useMemo(() => [...new Set(facilities.map((f) => f.county))].sort(), [facilities]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const result = maishawatchData.equipment.filter((item) => {
+    const result = equipment.filter((item) => {
       const facility = getFacilityName(item.facilityId);
-      const c = maishawatchData.facilities.find((f) => f.id === item.facilityId)?.county;
+      const c = facilities.find((f) => f.id === item.facilityId)?.county;
       const hay = `${item.name} ${item.serialNumber} ${facility} ${formatEquipmentType(item.type)} ${item.scenarioPattern}`.toLowerCase();
       return (
         (!q || hay.includes(q)) &&
@@ -53,7 +56,7 @@ export default function EquipmentPage() {
         ? a.name.localeCompare(b.name)
         : b.counterUsage - a.counterUsage
     );
-  }, [query, risk, type, county, sort]);
+  }, [equipment, facilities, query, risk, type, county, sort, getFacilityName]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -67,8 +70,33 @@ export default function EquipmentPage() {
     setPage(1);
   };
 
-  const critical = maishawatchData.equipment.filter((x) => x.riskLevel === "critical").length;
-  const discrepancy = maishawatchData.equipment.filter((x) => x.discrepancyFlagged).length;
+  const critical = equipment.filter((x) => x.riskLevel === "critical").length;
+  const discrepancy = equipment.filter((x) => x.discrepancyFlagged).length;
+
+  const riskPortfolio = useMemo(() => {
+    const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+    equipment.forEach((item) => {
+      if (counts[item.riskLevel] !== undefined) counts[item.riskLevel]++;
+    });
+    return [
+      { name: "Critical Risk", value: counts.critical, fill: "#ef4444" },
+      { name: "High Risk", value: counts.high, fill: "#f97316" },
+      { name: "Moderate Risk", value: counts.medium, fill: "#f59e0b" },
+      { name: "Low Risk", value: counts.low, fill: "#10b981" },
+    ];
+  }, [equipment]);
+
+  const typeBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {};
+    equipment.forEach((item) => {
+      const t = formatEquipmentType(item.type);
+      counts[t] = (counts[t] || 0) + 1;
+    });
+    return Object.entries(counts).map(([label, value]) => ({
+      label,
+      value,
+    }));
+  }, [equipment]);
 
   return (
     <div className="space-y-6">
@@ -76,18 +104,42 @@ export default function EquipmentPage() {
       <Reveal>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Asset Registry</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Asset Registry</p>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  isLive
+                    ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                }`}
+              >
+                <Radio className="h-2.5 w-2.5 animate-pulse" />
+                {isLive ? "Live API Connected" : "Connecting to API..."}
+              </span>
+            </div>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Equipment Intelligence</h1>
             <p className="mt-1 max-w-2xl text-xs sm:text-sm text-muted-foreground">
-              Search, filter, compare, and inspect every monitored biomedical asset across the hospital network.
+              Search, filter, compare, and inspect every monitored biomedical asset across the hospital network in real-time.
             </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <EquipmentOnboardModal />
+            <button
+              onClick={() => refresh()}
+              disabled={isLoading}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
           </div>
         </div>
       </Reveal>
 
+
       {/* KPI Cards */}
       <section className="grid gap-4 sm:grid-cols-3">
-        <MetricCard label="Assets Monitored" value={maishawatchData.equipment.length} hint="Total equipment in registry" icon={Activity} />
+        <MetricCard label="Assets Monitored" value={equipment.length} hint="Total equipment in registry" icon={Activity} />
         <MetricCard label="Critical Risk" value={critical} hint="Priority intervention required" icon={Gauge} tone="red" />
         <MetricCard label="Usage Discrepancies" value={discrepancy} hint="Counter vs register mismatch" icon={SlidersHorizontal} tone="amber" />
       </section>
@@ -102,7 +154,7 @@ export default function EquipmentPage() {
             </CardHeader>
             <CardContent className="grid h-[265px] grid-cols-[1fr_180px] items-center gap-2 px-6 py-4">
               <div className="space-y-3">
-                {getRiskPortfolio().map((x) => (
+                {riskPortfolio.map((x) => (
                   <div key={x.name} className="flex items-center justify-between">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
                       <span className="h-2.5 w-2.5 rounded-full" style={{ background: x.fill }} />
@@ -113,7 +165,7 @@ export default function EquipmentPage() {
                 ))}
               </div>
               <div className="h-44">
-                <RiskDonut data={getRiskPortfolio()} />
+                <RiskDonut data={riskPortfolio} />
               </div>
             </CardContent>
           </Card>
@@ -126,7 +178,7 @@ export default function EquipmentPage() {
               <p className="mt-1 text-xs text-muted-foreground">Coverage by clinical equipment category.</p>
             </CardHeader>
             <CardContent className="h-[265px] pt-4">
-              <RiskBars data={getTypeBreakdown()} />
+              <RiskBars data={typeBreakdown} />
             </CardContent>
           </Card>
         </Reveal>
@@ -258,7 +310,7 @@ export default function EquipmentPage() {
                       </td>
                       <td className="px-6 py-4 text-xs font-medium text-muted-foreground">{getFacilityName(item.facilityId)}</td>
                       <td className="px-6 py-4 text-xs text-muted-foreground">
-                        {maishawatchData.facilities.find((f) => f.id === item.facilityId)?.county}
+                        {facilities.find((f) => f.id === item.facilityId)?.county}
                       </td>
                       <td className="px-6 py-4 text-xs text-muted-foreground">{formatEquipmentType(item.type)}</td>
                       <td className="px-6 py-4">

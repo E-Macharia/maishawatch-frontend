@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react";
-import { maishawatchData } from "@/lib/data";
+import { useLiveData } from "@/lib/data/live-context";
 import { getOverviewMetrics } from "@/lib/data/metrics";
 
 function csvEscape(value: string | number) {
@@ -12,15 +12,18 @@ function csvEscape(value: string | number) {
 
 export function SnapshotButton() {
   const [open, setOpen] = useState(false);
+  const { equipment, facilities, alerts } = useLiveData();
 
   const exportCsv = () => {
-    const metrics = getOverviewMetrics();
-    const averageRisk = Math.round(maishawatchData.equipment.reduce((s, e) => s + e.riskScore, 0) / maishawatchData.equipment.length);
-    const critical = maishawatchData.equipment.filter((e) => e.riskLevel === "critical").length;
-    const discrepancy = maishawatchData.equipment.filter((e) => e.discrepancyFlagged).length;
+    const metrics = getOverviewMetrics(equipment, facilities, alerts);
+    const averageRisk = equipment.length
+      ? Math.round(equipment.reduce((s, e) => s + e.riskScore, 0) / equipment.length)
+      : 0;
+    const critical = equipment.filter((e) => e.riskLevel === "critical").length;
+    const discrepancy = equipment.filter((e) => e.discrepancyFlagged).length;
     const header = ["Equipment", "Serial Number", "Facility", "County", "Type", "Risk Level", "Risk Score", "Lead Time Days", "Counter Usage", "Register Usage", "Discrepancy %", "Last Maintenance"].map(csvEscape).join(",");
-    const rows = maishawatchData.equipment.slice().sort((a, b) => b.riskScore - a.riskScore).map((e) => {
-      const facility = maishawatchData.facilities.find((f) => f.id === e.facilityId);
+    const rows = equipment.slice().sort((a, b) => b.riskScore - a.riskScore).map((e) => {
+      const facility = facilities.find((f) => f.id === e.facilityId);
       return [e.name, e.serialNumber, facility?.name ?? "", facility?.county ?? "", e.type, e.riskLevel, e.riskScore, e.leadTimeDays, e.counterUsage, e.registerUsage, e.discrepancyPercent, e.lastMaintenanceDate].map(csvEscape).join(",");
     });
     const summary = [
@@ -46,11 +49,13 @@ export function SnapshotButton() {
   };
 
   const exportHtml = () => {
-    const metrics = getOverviewMetrics();
-    const averageRisk = Math.round(maishawatchData.equipment.reduce((s, e) => s + e.riskScore, 0) / maishawatchData.equipment.length);
-    const critical = maishawatchData.equipment.filter((e) => e.riskLevel === "critical").length;
-    const discrepancy = maishawatchData.equipment.filter((e) => e.discrepancyFlagged).length;
-    const rows = maishawatchData.equipment.slice().sort((a, b) => b.riskScore - a.riskScore).slice(0, 20).map((e) => `<tr><td>${e.name}</td><td>${e.serialNumber}</td><td>${e.riskLevel}</td><td>${e.riskScore}</td><td>${e.leadTimeDays} days</td></tr>`).join("");
+    const metrics = getOverviewMetrics(equipment, facilities, alerts);
+    const averageRisk = equipment.length
+      ? Math.round(equipment.reduce((s, e) => s + e.riskScore, 0) / equipment.length)
+      : 0;
+    const critical = equipment.filter((e) => e.riskLevel === "critical").length;
+    const discrepancy = equipment.filter((e) => e.discrepancyFlagged).length;
+    const rows = equipment.slice().sort((a, b) => b.riskScore - a.riskScore).slice(0, 20).map((e) => `<tr><td>${e.name}</td><td>${e.serialNumber}</td><td>${e.riskLevel}</td><td>${e.riskScore}</td><td>${e.leadTimeDays} days</td></tr>`).join("");
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>MaishaWatch Operational Snapshot</title><style>body{font-family:Inter,Arial,sans-serif;background:#0b1118;color:#e5edf6;padding:40px}h1{margin:0 0 6px}p{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:28px 0}.card{border:1px solid #273240;padding:16px;border-radius:5px;background:#111923}.value{font-size:28px;font-weight:700;color:#fff}.label{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#748196}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{text-align:left;padding:10px;border-bottom:1px solid #273240;font-size:12px}th{color:#748196;text-transform:uppercase;font-size:10px;letter-spacing:.1em}</style></head><body><h1>MaishaWatch Operational Snapshot</h1><p>Generated ${new Date().toLocaleString("en-KE")}</p><div class="grid"><div class="card"><div class="label">Equipment</div><div class="value">${metrics.equipmentCount}</div></div><div class="card"><div class="label">Critical assets</div><div class="value">${critical}</div></div><div class="card"><div class="label">Average risk</div><div class="value">${averageRisk}</div></div><div class="card"><div class="label">Usage flags</div><div class="value">${discrepancy}</div></div></div><h2>Highest-priority equipment</h2><table><thead><tr><th>Equipment</th><th>Serial</th><th>Risk</th><th>Score</th><th>Lead time</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>setTimeout(()=>window.print(),500)</script></body></html>`;
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     const anchor = document.createElement("a");
@@ -60,6 +65,7 @@ export function SnapshotButton() {
     URL.revokeObjectURL(url);
     setOpen(false);
   };
+
 
   return (
     <div className="relative">

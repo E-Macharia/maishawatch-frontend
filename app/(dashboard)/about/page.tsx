@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   ExternalLink,
@@ -11,10 +13,11 @@ import {
   Globe,
   CheckCircle2,
 } from "lucide-react";
-import { maishawatchData } from "@/lib/data";
+import { useLiveData } from "@/lib/data/live-context";
 
 export default function AboutPage() {
-  const { facilities, equipment, alerts } = maishawatchData;
+  const { facilities, equipment, alerts } = useLiveData();
+
 
   return (
     <div className="space-y-8 p-6 lg:p-8 max-w-6xl mx-auto">

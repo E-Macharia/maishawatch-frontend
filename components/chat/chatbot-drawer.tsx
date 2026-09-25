@@ -7,13 +7,13 @@ import { getChatAdapter } from "@/lib/chat/chat-adapter";
 import { ChatMessageList } from "./chat-message-list";
 import { ChatPromptSuggestions } from "./chat-prompt-suggestions";
 import type { ChatMessage } from "@/types/chat";
-import { maishawatchData } from "@/lib/data";
+import { useLiveData } from "@/lib/data/live-context";
 
 const initialMessage: ChatMessage = {
   id: "welcome-1",
   role: "assistant",
   content: `### Welcome to **MaishaWatch AI**
-I am your interactive risk-monitoring assistant, connected directly to the **MaishaWatch Backend Dataset** (12,394 facilities, 150 equipment assets, 324,000 telemetry readings).
+I am your interactive risk-monitoring assistant, connected directly to the **MaishaWatch Live API**.
 
 How can I help you today? You can click any suggested prompt below or type your question.`,
   timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -27,6 +27,7 @@ How can I help you today? You can click any suggested prompt below or type your 
 
 export function ChatbotDrawer() {
   const router = useRouter();
+  const { alerts } = useLiveData();
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([initialMessage]);
@@ -38,15 +39,16 @@ export function ChatbotDrawer() {
     if (!isOpen) {
       try {
         const readIds: string[] = JSON.parse(localStorage.getItem("maisha-notification-read") || "[]");
-        const activeAlerts = maishawatchData.alerts.filter((a) => a.severity === "critical" || a.severity === "high").slice(0, 6);
+        const activeAlerts = alerts.filter((a) => a.severity === "critical" || a.severity === "high").slice(0, 6);
         const unread = activeAlerts.filter((a) => !readIds.includes(a.id));
         setUnreadCount(unread.length);
       } catch {
-        const activeAlerts = maishawatchData.alerts.filter((a) => a.severity === "critical" || a.severity === "high").slice(0, 6);
+        const activeAlerts = alerts.filter((a) => a.severity === "critical" || a.severity === "high").slice(0, 6);
         setUnreadCount(activeAlerts.length);
       }
     }
-  }, [isOpen]);
+  }, [isOpen, alerts]);
+
 
   const handleToggle = () => {
     setIsOpen((prev) => {

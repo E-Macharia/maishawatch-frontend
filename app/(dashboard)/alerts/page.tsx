@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowUpRight, BellRing, CheckCircle2, CircleAlert, Search, X, Send } from "lucide-react";
+import {
+	AlertTriangle,
+	ArrowUpRight,
+	BellRing,
+	CheckCircle2,
+	CircleAlert,
+	Search,
+	Send,
+	X,
+	RefreshCw,
+	Radio,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { Reveal } from "@/components/dashboard/motion";
@@ -10,15 +21,23 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/dashboard/pagination";
 import { FilterSelect } from "@/components/dashboard/filter-select";
 import { TableEmptyState } from "@/components/dashboard/table-empty-state";
-import { maishawatchData, getFacilityName, getEquipmentName, facilityById, equipmentById } from "@/lib/data";
 import { AlertResolutionDialog } from "@/components/dashboard/alert-resolution-dialog";
 import { HospitalAlertDialog } from "@/components/dashboard/hospital-alert-dialog";
 import { api } from "@/lib/api/backend-client";
+import { useLiveData } from "@/lib/data";
 import type { Alert } from "@/types/maishawatch";
 
 const PAGE_SIZE = 8;
 
 export default function AlertsPage() {
+  const {
+    alerts: contextAlerts,
+    getEquipmentName,
+    getFacilityName,
+    getEquipmentById,
+    getFacilityById,
+  } = useLiveData();
+
   const [severity, setSeverity] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
@@ -73,17 +92,17 @@ export default function AlertsPage() {
     };
   }, []);
 
-  const alertsSource = useMemo(() => {
+  const alertsSource: Alert[] = useMemo(() => {
     if (liveAlerts && liveAlerts.length > 0) {
       return liveAlerts;
     }
-    return maishawatchData.alerts;
-  }, [liveAlerts]);
+    return contextAlerts || [];
+  }, [liveAlerts, contextAlerts]);
 
   const filtered = useMemo(
     () =>
       alertsSource.filter(
-        (a) =>
+        (a: Alert) =>
           !resolved.includes(a.id) &&
           (severity === "all" || a.severity === severity) &&
           (type === "all" || a.type === type) &&
@@ -92,14 +111,14 @@ export default function AlertsPage() {
               .toLowerCase()
               .includes(query.toLowerCase()))
       ),
-    [alertsSource, severity, type, query, resolved]
+    [alertsSource, severity, type, query, resolved, getEquipmentName, getFacilityName]
   );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const critical = alertsSource.filter((x) => x.severity === "critical" && !resolved.includes(x.id)).length;
-  const discrepancies = alertsSource.filter((x) => x.type === "discrepancy" && !resolved.includes(x.id)).length;
+  const critical = alertsSource.filter((x: Alert) => x.severity === "critical" && !resolved.includes(x.id)).length;
+  const discrepancies = alertsSource.filter((x: Alert) => x.type === "discrepancy" && !resolved.includes(x.id)).length;
 
   const resolve = (id: string) => {
     const nextResolved = Array.from(new Set([...resolved, id]));
@@ -130,7 +149,7 @@ export default function AlertsPage() {
         <AlertResolutionDialog
           alert={selected}
           equipment={
-            equipmentById.get(selected.equipmentId) ?? ({
+            getEquipmentById(selected.equipmentId) ?? ({
               id: selected.equipmentId,
               name: getEquipmentName(selected.equipmentId) || "Biomedical Asset",
               model: "Medical Device",
@@ -150,7 +169,7 @@ export default function AlertsPage() {
         <HospitalAlertDialog
           alert={notify}
           equipment={
-            equipmentById.get(notify.equipmentId) ?? ({
+            getEquipmentById(notify.equipmentId) ?? ({
               id: notify.equipmentId,
               name: getEquipmentName(notify.equipmentId) || "Biomedical Asset",
               model: "Medical Device",
@@ -163,7 +182,7 @@ export default function AlertsPage() {
             } as any)
           }
           facility={
-            facilityById.get(notify.facilityId) ?? ({
+            getFacilityById(notify.facilityId) ?? ({
               id: notify.facilityId,
               name: getFacilityName(notify.facilityId) || "Healthcare Facility",
               county: "Kenya",
@@ -199,7 +218,7 @@ export default function AlertsPage() {
       <section className="grid gap-4 sm:grid-cols-3">
         <MetricCard
           label="Open Alerts"
-          value={alertsSource.length - resolved.filter((id) => alertsSource.some((a) => a.id === id)).length}
+          value={alertsSource.length - resolved.filter((id) => alertsSource.some((a: Alert) => a.id === id)).length}
           hint="Signals requiring intervention"
           icon={BellRing}
           tone="amber"
@@ -284,7 +303,7 @@ export default function AlertsPage() {
 
           <CardContent className="p-0">
             <div className="divide-y divide-border">
-              {rows.map((alert) => (
+              {rows.map((alert: Alert) => (
                 <div key={alert.id} className="flex flex-col gap-4 p-5 transition-colors hover:bg-accent/40 lg:flex-row lg:items-center">
                   <div className="flex min-w-0 flex-1 items-start gap-3">
                     <div
