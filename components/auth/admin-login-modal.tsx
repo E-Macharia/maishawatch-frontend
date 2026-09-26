@@ -19,13 +19,21 @@ export function AdminLoginModal() {
   const { isLoginModalOpen, closeLoginModal, login, verifyOtp, directTokenLogin } = useAuth();
 
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
-  const [email, setEmail] = useState("machariaevans636@gmail.com");
-  const [password, setPassword] = useState("Admin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
-  const [debugOtp, setDebugOtp] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Resend cooldown timer
+  React.useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   if (!isLoginModalOpen) return null;
 
@@ -40,9 +48,7 @@ export function AdminLoginModal() {
       if (result.requiresOtp) {
         setStep("otp");
         setOtp("");
-        if (result.otpDebug) {
-          setDebugOtp(result.otpDebug);
-        }
+        setSuccessMsg(`A 6-digit verification code has been sent to ${email}. Please check your inbox.`);
       } else {
         setSuccessMsg("Logged in as System Administrator!");
         setTimeout(() => {
@@ -52,6 +58,21 @@ export function AdminLoginModal() {
       }
     } catch (err: any) {
       setErrorMsg(err?.message || "Failed to authenticate. Please check your credentials.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || isLoading) return;
+    setErrorMsg(null);
+    setIsLoading(true);
+    try {
+      await login(email, password);
+      setSuccessMsg(`A new 6-digit verification code has been sent to ${email}. Please check your inbox.`);
+      setResendCooldown(30);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to resend verification code.");
     } finally {
       setIsLoading(false);
     }
@@ -98,7 +119,6 @@ export function AdminLoginModal() {
     setErrorMsg(null);
     setSuccessMsg(null);
     setOtp("");
-    setDebugOtp(null);
   };
 
   const handleClose = () => {
@@ -184,28 +204,6 @@ export function AdminLoginModal() {
               </div>
             </div>
 
-            {/* Quick Demo Fill Helper */}
-            <div className="rounded-xl border border-border/80 bg-accent/30 p-3 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Sparkles className="h-3 w-3 text-amber-500" /> Default Admin
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail("machariaevans636@gmail.com");
-                    setPassword("Admin@123");
-                  }}
-                  className="text-primary hover:underline font-bold text-[10px]"
-                >
-                  Auto-fill
-                </button>
-              </div>
-              <p className="text-[10px] text-muted-foreground font-mono truncate">
-                machariaevans636@gmail.com / Admin@123
-              </p>
-            </div>
-
             <div className="pt-2 flex flex-col gap-2">
               <button
                 type="submit"
@@ -256,14 +254,6 @@ export function AdminLoginModal() {
               </div>
             </div>
 
-            {debugOtp && (
-              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-400 space-y-1">
-                <p className="font-semibold text-[11px]">Backend Debug OTP Available:</p>
-                <p className="font-mono font-bold text-sm tracking-wider">{debugOtp}</p>
-                <p className="text-[10px] opacity-80">(Auto-filled for instant verification)</p>
-              </div>
-            )}
-
             <div className="pt-2 flex flex-col gap-2">
               <button
                 type="submit"
@@ -283,13 +273,24 @@ export function AdminLoginModal() {
                 )}
               </button>
 
-              <button
-                type="button"
-                onClick={() => setStep("credentials")}
-                className="text-xs text-muted-foreground hover:text-foreground text-center py-1 font-medium transition-colors"
-              >
-                ← Back to credentials
-              </button>
+              <div className="flex items-center justify-between text-xs pt-1">
+                <button
+                  type="button"
+                  onClick={() => setStep("credentials")}
+                  className="text-muted-foreground hover:text-foreground font-medium transition-colors"
+                >
+                  ← Back to credentials
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isLoading || resendCooldown > 0}
+                  onClick={handleResendOtp}
+                  className="text-primary hover:underline font-bold disabled:opacity-40 transition-opacity"
+                >
+                  {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+                </button>
+              </div>
             </div>
           </form>
         )}

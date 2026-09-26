@@ -153,15 +153,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			// Handled below
 		}
 
-		// Fallback for default admin demo credentials
+		// Fallback for default admin credentials
 		if (
-			(username.toLowerCase() === "calebmunyeks002@gmail.com" ||
+			(username.toLowerCase() === "machariaevans636@gmail.com" ||
+				username.toLowerCase() === "calebmunyeks002@gmail.com" ||
 				username.toLowerCase() === "admin@maishawatch.go.ke") &&
 			password === "Admin@123"
 		) {
 			const offlineUser: AuthUser = {
 				id: "USR-NATIONAL-ADMIN",
-				name: "System Administrator",
+				name: "Evans Macharia",
 				email: username,
 				role: "system_administrator",
 				scope_type: "national",
