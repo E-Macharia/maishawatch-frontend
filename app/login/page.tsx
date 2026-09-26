@@ -27,12 +27,11 @@ export default function LoginPage() {
   const { isAuthenticated, isLoading: authLoading, login, verifyOtp, directTokenLogin } = useAuth();
 
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
-  const [email, setEmail] = useState("machariaevans636@gmail.com");
-  const [password, setPassword] = useState("Admin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [otp, setOtp] = useState("");
-  const [debugOtp, setDebugOtp] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,11 +64,8 @@ export default function LoginPage() {
 
       if (result.requiresOtp) {
         setStep("otp");
-        setOtp(""); // Require entering OTP from email
-        if (result.otpDebug) {
-          setDebugOtp(result.otpDebug);
-        }
-        setSuccessMsg(`Verification code sent to ${email}. Please check your inbox.`);
+        setOtp(""); // Require typing the code sent to inbox
+        setSuccessMsg(`A 6-digit verification code has been sent to ${email}. Please check your inbox and enter it below.`);
       } else {
         setSuccessMsg("Welcome back! Redirecting to your workspace...");
         setTimeout(() => {
@@ -89,7 +85,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password);
-      setSuccessMsg(`A new 6-digit verification code has been sent to ${email}`);
+      setSuccessMsg(`A new 6-digit verification code has been sent to ${email}. Please check your inbox.`);
       setResendCooldown(30);
     } catch (err: any) {
       setErrorMsg(err?.message || "Failed to resend verification code.");
@@ -369,25 +365,6 @@ export default function LoginPage() {
                   Quick Sign In via OAuth2 (/auth/token)
                 </button>
               </div>
-
-              {/* Admin Autofill Pill */}
-              <div className="mt-6 rounded-2xl border border-border bg-accent/40 p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Default National Admin
-                  </span>
-                  <button
-                    type="button"
-                    onClick={autofillAdmin}
-                    className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline"
-                  >
-                    Auto-fill
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground font-mono truncate">
-                  machariaevans636@gmail.com / Admin@123
-                </p>
-              </div>
             </form>
           )}
 
@@ -400,7 +377,7 @@ export default function LoginPage() {
                   Code Dispatched to Your Email
                 </div>
                 <p className="text-foreground leading-relaxed">
-                  A 6-digit verification code was sent to <strong className="font-mono text-rose-600 dark:text-rose-400">{email}</strong>.
+                  A 6-digit verification code has been sent to <strong className="font-mono text-rose-600 dark:text-rose-400">{email}</strong>.
                   Please check your inbox (and Spam/Junk folder) and enter it below.
                 </p>
               </div>
@@ -425,21 +402,6 @@ export default function LoginPage() {
                   />
                 </div>
               </div>
-
-              {debugOtp && (
-                <div className="rounded-xl border border-border/80 bg-accent/30 p-3 text-xs text-muted-foreground space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-medium">Backup OTP code:</span>
-                    <button
-                      type="button"
-                      onClick={() => setOtp(debugOtp)}
-                      className="font-mono font-bold text-sm tracking-widest text-primary hover:underline"
-                    >
-                      {debugOtp} (Click to fill)
-                    </button>
-                  </div>
-                </div>
-              )}
 
               <div className="pt-2 space-y-3">
                 <button
