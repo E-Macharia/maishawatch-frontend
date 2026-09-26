@@ -128,10 +128,11 @@ export default function LoginPage() {
     }
   };
 
-  const autofillAdmin = () => {
-    setEmail("machariaevans636@gmail.com");
-    setPassword("Admin@123");
+  const handleForgotPassword = () => {
     setErrorMsg(null);
+    setSuccessMsg(
+      "To reset your administrator credentials, please contact the National Engineering Desk or write to watchmaisha@gmail.com."
+    );
   };
 
   return (
@@ -295,7 +296,7 @@ export default function LoginPage() {
                   </label>
                   <button
                     type="button"
-                    onClick={autofillAdmin}
+                    onClick={handleForgotPassword}
                     className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline"
                   >
                     Forgot password?
