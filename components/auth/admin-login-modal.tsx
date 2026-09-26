@@ -19,7 +19,7 @@ export function AdminLoginModal() {
   const { isLoginModalOpen, closeLoginModal, login, verifyOtp, directTokenLogin } = useAuth();
 
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
-  const [email, setEmail] = useState("calebmunyeks002@gmail.com");
+  const [email, setEmail] = useState("machariaevans636@gmail.com");
   const [password, setPassword] = useState("Admin@123");
   const [otp, setOtp] = useState("");
   const [debugOtp, setDebugOtp] = useState<string | null>(null);
@@ -39,9 +39,9 @@ export function AdminLoginModal() {
 
       if (result.requiresOtp) {
         setStep("otp");
+        setOtp("");
         if (result.otpDebug) {
           setDebugOtp(result.otpDebug);
-          setOtp(result.otpDebug); // Auto-populate for developer convenience
         }
       } else {
         setSuccessMsg("Logged in as System Administrator!");
@@ -193,7 +193,7 @@ export function AdminLoginModal() {
                 <button
                   type="button"
                   onClick={() => {
-                    setEmail("calebmunyeks002@gmail.com");
+                    setEmail("machariaevans636@gmail.com");
                     setPassword("Admin@123");
                   }}
                   className="text-primary hover:underline font-bold text-[10px]"
@@ -202,7 +202,7 @@ export function AdminLoginModal() {
                 </button>
               </div>
               <p className="text-[10px] text-muted-foreground font-mono truncate">
-                calebmunyeks002@gmail.com / Admin@123
+                machariaevans636@gmail.com / Admin@123
               </p>
             </div>
 

@@ -27,16 +27,25 @@ export default function LoginPage() {
   const { isAuthenticated, isLoading: authLoading, login, verifyOtp, directTokenLogin } = useAuth();
 
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
-  const [email, setEmail] = useState("calebmunyeks002@gmail.com");
+  const [email, setEmail] = useState("machariaevans636@gmail.com");
   const [password, setPassword] = useState("Admin@123");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [otp, setOtp] = useState("");
   const [debugOtp, setDebugOtp] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   // If already authenticated, navigate to dashboard
   useEffect(() => {
@@ -48,6 +57,7 @@ export default function LoginPage() {
   const handleCredentialsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setSuccessMsg(null);
     setIsSubmitting(true);
 
     try {
@@ -55,10 +65,11 @@ export default function LoginPage() {
 
       if (result.requiresOtp) {
         setStep("otp");
+        setOtp(""); // Require entering OTP from email
         if (result.otpDebug) {
           setDebugOtp(result.otpDebug);
-          setOtp(result.otpDebug); // Convenience auto-fill
         }
+        setSuccessMsg(`Verification code sent to ${email}. Please check your inbox.`);
       } else {
         setSuccessMsg("Welcome back! Redirecting to your workspace...");
         setTimeout(() => {
@@ -67,6 +78,21 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       setErrorMsg(err?.message || "Invalid credentials. Please verify your email and password.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || isSubmitting) return;
+    setErrorMsg(null);
+    setIsSubmitting(true);
+    try {
+      await login(email, password);
+      setSuccessMsg(`A new 6-digit verification code has been sent to ${email}`);
+      setResendCooldown(30);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to resend verification code.");
     } finally {
       setIsSubmitting(false);
     }
@@ -107,7 +133,7 @@ export default function LoginPage() {
   };
 
   const autofillAdmin = () => {
-    setEmail("calebmunyeks002@gmail.com");
+    setEmail("machariaevans636@gmail.com");
     setPassword("Admin@123");
     setErrorMsg(null);
   };
@@ -359,7 +385,7 @@ export default function LoginPage() {
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground font-mono truncate">
-                  calebmunyeks002@gmail.com / Admin@123
+                  machariaevans636@gmail.com / Admin@123
                 </p>
               </div>
             </form>
@@ -368,9 +394,15 @@ export default function LoginPage() {
           {/* STEP 2: 2-FACTOR OTP */}
           {step === "otp" && (
             <form onSubmit={handleOtpSubmit} className="space-y-5">
-              <div className="rounded-2xl border border-border bg-accent/30 p-4 text-xs text-muted-foreground space-y-1">
-                <p className="font-semibold text-foreground">Two-Factor Authentication Active</p>
-                <p>The backend sent a verification code to <span className="font-mono text-foreground font-semibold">{email}</span>.</p>
+              <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 text-xs text-muted-foreground space-y-2">
+                <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-xs uppercase tracking-wider">
+                  <Mail className="h-4 w-4" />
+                  Code Dispatched to Your Email
+                </div>
+                <p className="text-foreground leading-relaxed">
+                  A 6-digit verification code was sent to <strong className="font-mono text-rose-600 dark:text-rose-400">{email}</strong>.
+                  Please check your inbox (and Spam/Junk folder) and enter it below.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -385,21 +417,27 @@ export default function LoginPage() {
                     type="text"
                     maxLength={6}
                     required
+                    autoFocus
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
                     placeholder="123456"
-                    className="w-full h-12 text-center font-mono tracking-[0.3em] text-lg rounded-2xl border border-border bg-background pl-10 pr-4 text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                    className="w-full h-12 text-center font-mono tracking-[0.35em] text-xl rounded-2xl border border-border bg-background pl-10 pr-4 text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 font-bold"
                   />
                 </div>
               </div>
 
               {debugOtp && (
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-400 space-y-1">
+                <div className="rounded-xl border border-border/80 bg-accent/30 p-3 text-xs text-muted-foreground space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-[11px]">Backend Debug Code:</span>
-                    <span className="font-mono font-bold text-sm tracking-widest">{debugOtp}</span>
+                    <span className="text-[11px] font-medium">Backup OTP code:</span>
+                    <button
+                      type="button"
+                      onClick={() => setOtp(debugOtp)}
+                      className="font-mono font-bold text-sm tracking-widest text-primary hover:underline"
+                    >
+                      {debugOtp} (Click to fill)
+                    </button>
                   </div>
-                  <p className="text-[10px] opacity-80">(Auto-filled for rapid sign-in)</p>
                 </div>
               )}
 
@@ -422,13 +460,24 @@ export default function LoginPage() {
                   )}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setStep("credentials")}
-                  className="w-full py-2 text-xs font-semibold text-muted-foreground hover:text-foreground text-center transition-colors"
-                >
-                  ← Back to credentials
-                </button>
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setStep("credentials")}
+                    className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    ← Back to credentials
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSubmitting || resendCooldown > 0}
+                    onClick={handleResendOtp}
+                    className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline disabled:opacity-40 transition-opacity"
+                  >
+                    {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+                  </button>
+                </div>
               </div>
             </form>
           )}
