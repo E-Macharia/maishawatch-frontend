@@ -107,7 +107,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			if (data.access_token) {
 				const userObj: AuthUser = data.user || {
 					id: "USR-NATIONAL-ADMIN",
-					name: "System Administrator",
+					name:
+						email.toLowerCase() === "machariaevans636@gmail.com"
+							? "Evans Macharia"
+							: "System Administrator",
 					email,
 					role: "system_administrator",
 					scope_type: "national",
@@ -141,7 +144,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				const tokenData = await res.json();
 				const fallbackUser: AuthUser = {
 					id: "USR-NATIONAL-ADMIN",
-					name: "System Administrator",
+					name:
+						username.toLowerCase() === "machariaevans636@gmail.com"
+							? "Evans Macharia"
+							: "System Administrator",
 					email: username,
 					role: "system_administrator",
 					scope_type: "national",
@@ -156,7 +162,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		// Fallback for default admin credentials
 		if (
 			(username.toLowerCase() === "machariaevans636@gmail.com" ||
-				username.toLowerCase() === "calebmunyeks002@gmail.com" ||
 				username.toLowerCase() === "admin@maishawatch.go.ke") &&
 			password === "Admin@123"
 		) {
@@ -195,7 +200,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			const data = await res.json();
 			const userObj: AuthUser = data.user || {
 				id: "USR-NATIONAL-ADMIN",
-				name: "System Administrator",
+				name:
+					email.toLowerCase() === "machariaevans636@gmail.com"
+						? "Evans Macharia"
+						: "System Administrator",
 				email,
 				role: "system_administrator",
 				scope_type: "national",
@@ -206,7 +214,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			if (otp.length === 6) {
 				const fallbackUser: AuthUser = {
 					id: "USR-NATIONAL-ADMIN",
-					name: "System Administrator",
+					name:
+						email.toLowerCase() === "machariaevans636@gmail.com"
+							? "Evans Macharia"
+							: "System Administrator",
 					email,
 					role: "system_administrator",
 					scope_type: "national",

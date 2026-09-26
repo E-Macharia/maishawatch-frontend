@@ -27,8 +27,8 @@ export default function LoginPage() {
   const { isAuthenticated, isLoading: authLoading, login, verifyOtp, directTokenLogin } = useAuth();
 
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("machariaevans636@gmail.com");
+  const [password, setPassword] = useState("Admin@123");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [otp, setOtp] = useState("");
@@ -37,6 +37,12 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const handleAutofillAdmin = () => {
+    setEmail("machariaevans636@gmail.com");
+    setPassword("Admin@123");
+    setErrorMsg(null);
+  };
 
   // Resend cooldown timer
   useEffect(() => {
@@ -65,7 +71,9 @@ export default function LoginPage() {
       if (result.requiresOtp) {
         setStep("otp");
         setOtp(""); // Require typing the code sent to inbox
-        setSuccessMsg(`A 6-digit verification code has been sent to ${email}. Please check your inbox and enter it below.`);
+        setSuccessMsg(
+          `A 6-digit verification code has been sent to your email address (${email || "machariaevans636@gmail.com"}). Please check your inbox and Spam/Junk folder.`
+        );
       } else {
         setSuccessMsg("Welcome back! Redirecting to your workspace...");
         setTimeout(() => {
@@ -85,7 +93,9 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password);
-      setSuccessMsg(`A new 6-digit verification code has been sent to ${email}. Please check your inbox.`);
+      setSuccessMsg(
+        `A new 6-digit verification code has been sent to your email address (${email || "machariaevans636@gmail.com"}). Please check your inbox and Spam/Junk folder.`
+      );
       setResendCooldown(30);
     } catch (err: any) {
       setErrorMsg(err?.message || "Failed to resend verification code.");
@@ -282,7 +292,7 @@ export default function LoginPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@maishawatch.go.ke"
+                    placeholder="machariaevans636@gmail.com"
                     className="w-full h-12 rounded-2xl border border-border bg-background/50 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all"
                   />
                 </div>
@@ -311,7 +321,7 @@ export default function LoginPage() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
+                    placeholder="Admin@123"
                     className="w-full h-12 rounded-2xl border border-border bg-background/50 pl-10 pr-11 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all"
                   />
                   <button
@@ -322,6 +332,30 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+              </div>
+
+              {/* Default National Administrator Auto-fill Pill */}
+              <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-3.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="h-8 w-8 rounded-xl bg-rose-500/10 flex items-center justify-center shrink-0 text-rose-600 dark:text-rose-400">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-foreground truncate">
+                      National System Administrator
+                    </p>
+                    <p className="text-[11px] text-muted-foreground font-mono truncate">
+                      machariaevans636@gmail.com · Evans Macharia
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAutofillAdmin}
+                  className="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 transition-colors"
+                >
+                  Auto-fill
+                </button>
               </div>
 
               {/* Remember Me Checkbox */}
@@ -378,8 +412,11 @@ export default function LoginPage() {
                   Code Dispatched to Your Email
                 </div>
                 <p className="text-foreground leading-relaxed">
-                  A 6-digit verification code has been sent to <strong className="font-mono text-rose-600 dark:text-rose-400">{email}</strong>.
-                  Please check your inbox (and Spam/Junk folder) and enter it below.
+                  A 6-digit verification code has been sent to your email address (
+                  <strong className="font-mono text-rose-600 dark:text-rose-400">
+                    {email || "machariaevans636@gmail.com"}
+                  </strong>
+                  ). Please check your inbox and Spam/Junk folder.
                 </p>
               </div>
 

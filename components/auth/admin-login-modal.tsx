@@ -19,13 +19,19 @@ export function AdminLoginModal() {
   const { isLoginModalOpen, closeLoginModal, login, verifyOtp, directTokenLogin } = useAuth();
 
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("machariaevans636@gmail.com");
+  const [password, setPassword] = useState("Admin@123");
   const [otp, setOtp] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const handleAutofillAdmin = () => {
+    setEmail("machariaevans636@gmail.com");
+    setPassword("Admin@123");
+    setErrorMsg(null);
+  };
 
   // Resend cooldown timer
   React.useEffect(() => {
@@ -48,7 +54,9 @@ export function AdminLoginModal() {
       if (result.requiresOtp) {
         setStep("otp");
         setOtp("");
-        setSuccessMsg(`A 6-digit verification code has been sent to ${email}. Please check your inbox.`);
+        setSuccessMsg(
+          `A 6-digit verification code has been sent to your email address (${email || "machariaevans636@gmail.com"}). Please check your inbox and Spam/Junk folder.`
+        );
       } else {
         setSuccessMsg("Logged in as System Administrator!");
         setTimeout(() => {
@@ -69,7 +77,9 @@ export function AdminLoginModal() {
     setIsLoading(true);
     try {
       await login(email, password);
-      setSuccessMsg(`A new 6-digit verification code has been sent to ${email}. Please check your inbox.`);
+      setSuccessMsg(
+        `A new 6-digit verification code has been sent to your email address (${email || "machariaevans636@gmail.com"}). Please check your inbox and Spam/Junk folder.`
+      );
       setResendCooldown(30);
     } catch (err: any) {
       setErrorMsg(err?.message || "Failed to resend verification code.");
@@ -152,7 +162,7 @@ export function AdminLoginModal() {
           <p className="text-xs text-muted-foreground">
             {step === "credentials"
               ? "Sign in with national administrator credentials to unlock full write access."
-              : `Enter the 6-digit OTP code sent to ${email}`}
+              : `A 6-digit verification code has been sent to your email address (${email || "machariaevans636@gmail.com"}). Please check your inbox and Spam/Junk folder.`}
           </p>
         </div>
 
@@ -183,7 +193,7 @@ export function AdminLoginModal() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
+                  placeholder="machariaevans636@gmail.com"
                   className="w-full h-10 rounded-xl border border-border bg-background pl-10 pr-3.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
@@ -198,10 +208,28 @@ export function AdminLoginModal() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="Admin@123"
                   className="w-full h-10 rounded-xl border border-border bg-background pl-10 pr-3.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
+            </div>
+
+            {/* Default Admin Quick Pill */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-2.5 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                <div className="min-w-0 text-[11px]">
+                  <span className="font-bold text-foreground">Evans Macharia: </span>
+                  <span className="text-muted-foreground font-mono">machariaevans636@gmail.com</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleAutofillAdmin}
+                className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+              >
+                Auto-fill
+              </button>
             </div>
 
             <div className="pt-2 flex flex-col gap-2">
@@ -238,6 +266,19 @@ export function AdminLoginModal() {
         {/* Step 2: 2FA OTP Form */}
         {step === "otp" && (
           <form onSubmit={handleOtpSubmit} className="mt-5 space-y-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground space-y-1.5">
+              <div className="flex items-center gap-1.5 text-primary font-bold text-xs uppercase tracking-wider">
+                <Mail className="h-3.5 w-3.5" />
+                Live Verification Code Dispatched
+              </div>
+              <p className="text-foreground leading-relaxed text-[11px]">
+                A 6-digit verification code has been sent to your email address (
+                <strong className="font-mono text-primary">
+                  {email || "machariaevans636@gmail.com"}
+                </strong>
+                ). Please check your inbox and Spam/Junk folder.
+              </p>
+            </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">6-Digit OTP Code</label>
               <div className="relative">
