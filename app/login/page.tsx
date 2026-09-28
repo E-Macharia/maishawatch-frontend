@@ -32,6 +32,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [otp, setOtp] = useState("");
+  const [debugOtp, setDebugOtp] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,6 +72,9 @@ export default function LoginPage() {
       if (result.requiresOtp) {
         setStep("otp");
         setOtp(""); // Require typing the code sent to inbox
+        if (result.otpDebug) {
+          setDebugOtp(result.otpDebug);
+        }
         setSuccessMsg(
           `A 6-digit verification code has been sent to your email address (${email || "machariaevans636@gmail.com"}). Please check your inbox and Spam/Junk folder.`
         );
@@ -92,7 +96,10 @@ export default function LoginPage() {
     setErrorMsg(null);
     setIsSubmitting(true);
     try {
-      await login(email, password);
+      const result = await login(email, password);
+      if (result.otpDebug) {
+        setDebugOtp(result.otpDebug);
+      }
       setSuccessMsg(
         `A new 6-digit verification code has been sent to your email address (${email || "machariaevans636@gmail.com"}). Please check your inbox and Spam/Junk folder.`
       );
@@ -481,7 +488,10 @@ export default function LoginPage() {
                 <div className="flex items-center justify-between pt-1">
                   <button
                     type="button"
-                    onClick={() => setStep("credentials")}
+                    onClick={() => {
+                      setStep("credentials");
+                      setDebugOtp(null);
+                    }}
                     className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
                   >
                     ← Back to credentials
