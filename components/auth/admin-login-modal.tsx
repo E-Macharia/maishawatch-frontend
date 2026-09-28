@@ -22,6 +22,7 @@ export function AdminLoginModal() {
   const [email, setEmail] = useState("machariaevans636@gmail.com");
   const [password, setPassword] = useState("Admin@123");
   const [otp, setOtp] = useState("");
+  const [debugOtp, setDebugOtp] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -54,6 +55,9 @@ export function AdminLoginModal() {
       if (result.requiresOtp) {
         setStep("otp");
         setOtp("");
+        if (result.otpDebug) {
+          setDebugOtp(result.otpDebug);
+        }
         setSuccessMsg(
           `A 6-digit verification code has been sent to your email address (${email || "machariaevans636@gmail.com"}). Please check your inbox and Spam/Junk folder.`
         );
@@ -129,6 +133,7 @@ export function AdminLoginModal() {
     setErrorMsg(null);
     setSuccessMsg(null);
     setOtp("");
+    setDebugOtp(null);
   };
 
   const handleClose = () => {
@@ -294,6 +299,24 @@ export function AdminLoginModal() {
                 />
               </div>
             </div>
+
+            {debugOtp && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-[11px]">Verification Code:</span>
+                  <button
+                    type="button"
+                    onClick={() => setOtp(debugOtp)}
+                    className="font-mono font-bold text-sm tracking-widest text-rose-600 dark:text-rose-400 hover:underline"
+                  >
+                    {debugOtp} (Click to fill)
+                  </button>
+                </div>
+                <p className="text-[10px] opacity-80 leading-tight">
+                  Notice: Render Free Tier blocks outbound SMTP. Click code above to fill.
+                </p>
+              </div>
+            )}
 
             <div className="pt-2 flex flex-col gap-2">
               <button
