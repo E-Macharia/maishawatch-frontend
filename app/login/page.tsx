@@ -279,7 +279,7 @@ export default function LoginPage() {
               <div>
                 <p className="font-bold">Session Timed Out</p>
                 <p className="leading-relaxed font-medium mt-0.5">
-                  You have been logged out after 30 minutes of inactivity. Please sign in to resume your session.
+                  Your session expired due to 30 minutes of inactivity. Please sign in to resume your workspace.
                 </p>
               </div>
             </div>
