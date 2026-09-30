@@ -19,6 +19,7 @@ import {
   Building2,
   Activity,
   Brain,
+  Clock,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
 
@@ -37,6 +38,17 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
+
+  // Check URL query parameters for session expiration
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("reason") === "session_expired") {
+        setSessionExpiredNotice(true);
+      }
+    }
+  }, []);
 
   const handleAutofillAdmin = () => {
     setEmail("machariaevans636@gmail.com");
@@ -261,6 +273,18 @@ export default function LoginPage() {
           </div>
 
           {/* Feedback Messages */}
+          {sessionExpiredNotice && !errorMsg && (
+            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3.5 text-xs text-amber-700 dark:text-amber-400">
+              <Clock className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+              <div>
+                <p className="font-bold">Session Timed Out</p>
+                <p className="leading-relaxed font-medium mt-0.5">
+                  You have been logged out after 30 minutes of inactivity. Please sign in to resume your session.
+                </p>
+              </div>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="mb-6 flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-3.5 text-xs text-rose-600 dark:text-rose-400">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />

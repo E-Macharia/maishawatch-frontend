@@ -33,10 +33,12 @@ interface AuthContextType {
 	) => Promise<{ requiresOtp: boolean; otpDebug?: string }>;
 	verifyOtp: (email: string, otp: string) => Promise<void>;
 	directTokenLogin: (username: string, password: string) => Promise<void>;
-	logout: () => void;
+	logout: (reason?: string) => void;
 }
 
 const USER_KEY = "maishawatch_auth_user";
+export const LAST_ACTIVE_KEY = "maishawatch_last_active";
+export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -46,15 +48,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	const [isLoading, setIsLoading] = useState(true);
 	const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
-	// Load session from localStorage on mount and verify
+	// Load session from localStorage on mount and verify expiration
 	useEffect(() => {
 		async function restoreSession() {
 			try {
 				const storedToken = localStorage.getItem(TOKEN_KEY);
 				const storedUser = localStorage.getItem(USER_KEY);
-				if (storedToken && storedUser) {
+				const storedActive = localStorage.getItem(LAST_ACTIVE_KEY);
+				const lastActiveTime = storedActive ? parseInt(storedActive, 10) : 0;
+
+				// Check if the restored session has been inactive for > 30 minutes
+				if (storedActive && Date.now() - lastActiveTime >= INACTIVITY_TIMEOUT_MS) {
+					console.warn("🔒 Stored session expired due to inactivity (>30 mins). Purging.");
+					localStorage.removeItem(TOKEN_KEY);
+					localStorage.removeItem(USER_KEY);
+					localStorage.removeItem(LAST_ACTIVE_KEY);
+					setToken(null);
+					setUser(null);
+				} else if (storedToken && storedUser) {
 					setToken(storedToken);
 					setUser(JSON.parse(storedUser));
+					localStorage.setItem(LAST_ACTIVE_KEY, Date.now().toString());
 				}
 			} catch (err) {
 				console.error("Failed to restore session from localStorage", err);
@@ -74,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		try {
 			localStorage.setItem(TOKEN_KEY, accessToken);
 			localStorage.setItem(USER_KEY, JSON.stringify(authUser));
+			localStorage.setItem(LAST_ACTIVE_KEY, Date.now().toString());
 		} catch (e) {
 			console.warn("Could not save auth session in localStorage", e);
 		}
@@ -233,7 +248,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		await tryDirectTokenLogin(username, password);
 	};
 
-	const logout = () => {
+	const logout = useCallback((reason?: string) => {
 		try {
 			api.auth.logout().catch(() => {});
 		} catch {}
@@ -242,10 +257,101 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		try {
 			localStorage.removeItem(TOKEN_KEY);
 			localStorage.removeItem(USER_KEY);
+			localStorage.removeItem(LAST_ACTIVE_KEY);
 		} catch (e) {
 			console.warn("Could not remove auth session from localStorage", e);
 		}
-	};
+
+		if (reason === "session_expired" && typeof window !== "undefined") {
+			if (!window.location.pathname.startsWith("/login")) {
+				window.location.href = "/login?reason=session_expired";
+			}
+		}
+	}, []);
+
+	// Throttled activity recording
+	const recordActivity = useCallback(() => {
+		if (typeof window === "undefined") return;
+		const now = Date.now();
+		const lastStr = localStorage.getItem(LAST_ACTIVE_KEY);
+		const lastTime = lastStr ? parseInt(lastStr, 10) : 0;
+		// Throttle writes to once every 10 seconds
+		if (now - lastTime > 10000) {
+			localStorage.setItem(LAST_ACTIVE_KEY, now.toString());
+		}
+	}, []);
+
+	// Activity listener: track mouse, keyboard, touch, scroll, clicks
+	useEffect(() => {
+		if (!token || !user) return;
+
+		recordActivity();
+
+		const activityEvents = [
+			"mousedown",
+			"keydown",
+			"scroll",
+			"touchstart",
+			"click",
+		];
+
+		const handleActivity = () => {
+			recordActivity();
+		};
+
+		activityEvents.forEach((event) => {
+			window.addEventListener(event, handleActivity, { passive: true });
+		});
+
+		return () => {
+			activityEvents.forEach((event) => {
+				window.removeEventListener(event, handleActivity);
+			});
+		};
+	}, [token, user, recordActivity]);
+
+	// Inactivity timer: check every 15 seconds if 30 minutes have elapsed
+	useEffect(() => {
+		if (!token || !user) return;
+
+		const checkInterval = setInterval(() => {
+			const lastStr = localStorage.getItem(LAST_ACTIVE_KEY);
+			const lastActive = lastStr ? parseInt(lastStr, 10) : Date.now();
+			const elapsed = Date.now() - lastActive;
+
+			if (elapsed >= INACTIVITY_TIMEOUT_MS) {
+				console.warn("🔒 Session expired after 30 minutes of inactivity. Logging out.");
+				logout("session_expired");
+			}
+		}, 15000);
+
+		return () => clearInterval(checkInterval);
+	}, [token, user, logout]);
+
+	// Cross-tab synchronization via storage event
+	useEffect(() => {
+		const handleStorageChange = (e: StorageEvent) => {
+			if (e.key === TOKEN_KEY) {
+				if (!e.newValue) {
+					// Another tab logged out
+					setToken(null);
+					setUser(null);
+				} else {
+					// Another tab logged in
+					setToken(e.newValue);
+					const storedUser = localStorage.getItem(USER_KEY);
+					if (storedUser) {
+						try {
+							setUser(JSON.parse(storedUser));
+						} catch {}
+					}
+				}
+			}
+		};
+
+		window.addEventListener("storage", handleStorageChange);
+		return () => window.removeEventListener("storage", handleStorageChange);
+	}, []);
 
 	const isAuthenticated = !!token && !!user;
 	const isAdmin =
