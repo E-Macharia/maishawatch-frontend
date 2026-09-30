@@ -34,11 +34,15 @@ interface AuthContextType {
 	verifyOtp: (email: string, otp: string) => Promise<void>;
 	directTokenLogin: (username: string, password: string) => Promise<void>;
 	logout: (reason?: string) => void;
+	showInactivityWarning: boolean;
+	secondsRemaining: number;
+	extendSession: () => void;
 }
 
 const USER_KEY = "maishawatch_auth_user";
 export const LAST_ACTIVE_KEY = "maishawatch_last_active";
 export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity
+export const INACTIVITY_WARNING_MS = 28 * 60 * 1000; // 28 minutes warning (2 minutes remaining)
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -47,6 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	const [token, setToken] = useState<string | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+	const [showInactivityWarning, setShowInactivityWarning] = useState(false);
+	const [secondsRemaining, setSecondsRemaining] = useState(120);
 
 	// Load session from localStorage on mount and verify expiration
 	useEffect(() => {
@@ -254,6 +260,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		} catch {}
 		setToken(null);
 		setUser(null);
+		setShowInactivityWarning(false);
 		try {
 			localStorage.removeItem(TOKEN_KEY);
 			localStorage.removeItem(USER_KEY);
@@ -269,25 +276,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		}
 	}, []);
 
-	// Throttled activity recording
+	// Reset inactivity timer and dismiss warning
+	const extendSession = useCallback(() => {
+		if (typeof window === "undefined") return;
+		const now = Date.now();
+		localStorage.setItem(LAST_ACTIVE_KEY, now.toString());
+		setShowInactivityWarning(false);
+		setSecondsRemaining(120);
+	}, []);
+
+	// Throttled activity recording (at most once every 10 seconds)
 	const recordActivity = useCallback(() => {
 		if (typeof window === "undefined") return;
 		const now = Date.now();
 		const lastStr = localStorage.getItem(LAST_ACTIVE_KEY);
 		const lastTime = lastStr ? parseInt(lastStr, 10) : 0;
-		// Throttle writes to once every 10 seconds
 		if (now - lastTime > 10000) {
 			localStorage.setItem(LAST_ACTIVE_KEY, now.toString());
 		}
 	}, []);
 
-	// Activity listener: track mouse, keyboard, touch, scroll, clicks
+	// Activity listener: track mouse movement, mouse clicks, keyboard, touch, scroll
 	useEffect(() => {
 		if (!token || !user) return;
 
 		recordActivity();
 
 		const activityEvents = [
+			"mousemove",
 			"mousedown",
 			"keydown",
 			"scroll",
@@ -310,9 +326,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		};
 	}, [token, user, recordActivity]);
 
-	// Inactivity timer: check every 15 seconds if 30 minutes have elapsed
+	// Inactivity timer & countdown: check for warning at 28 mins and timeout at 30 mins
 	useEffect(() => {
-		if (!token || !user) return;
+		if (!token || !user) {
+			setShowInactivityWarning(false);
+			return;
+		}
 
 		const checkInterval = setInterval(() => {
 			const lastStr = localStorage.getItem(LAST_ACTIVE_KEY);
@@ -321,9 +340,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 			if (elapsed >= INACTIVITY_TIMEOUT_MS) {
 				console.warn("🔒 Session expired after 30 minutes of inactivity. Logging out.");
+				setShowInactivityWarning(false);
 				logout("session_expired");
+			} else if (elapsed >= INACTIVITY_WARNING_MS) {
+				const remaining = Math.max(0, Math.ceil((INACTIVITY_TIMEOUT_MS - elapsed) / 1000));
+				setSecondsRemaining(remaining);
+				setShowInactivityWarning(true);
+			} else {
+				setShowInactivityWarning(false);
 			}
-		}, 15000);
+		}, 1000);
 
 		return () => clearInterval(checkInterval);
 	}, [token, user, logout]);
@@ -336,6 +362,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					// Another tab logged out
 					setToken(null);
 					setUser(null);
+					setShowInactivityWarning(false);
 				} else {
 					// Another tab logged in
 					setToken(e.newValue);
@@ -345,6 +372,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 							setUser(JSON.parse(storedUser));
 						} catch {}
 					}
+				}
+			} else if (e.key === LAST_ACTIVE_KEY && e.newValue) {
+				const lastActive = parseInt(e.newValue, 10);
+				if (Date.now() - lastActive < INACTIVITY_WARNING_MS) {
+					setShowInactivityWarning(false);
 				}
 			}
 		};
@@ -372,6 +404,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				verifyOtp,
 				directTokenLogin,
 				logout,
+				showInactivityWarning,
+				secondsRemaining,
+				extendSession,
 			}}
 		>
 			{children}

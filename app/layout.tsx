@@ -6,6 +6,7 @@ import { ChatbotDrawer } from "@/components/chat/chatbot-drawer";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import { LiveDataProvider } from "@/lib/data/live-context";
 import { AdminLoginModal } from "@/components/auth/admin-login-modal";
+import { InactivityWarningModal } from "@/components/auth/inactivity-warning-modal";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
 	variable: "--font-sans",
@@ -44,6 +45,7 @@ export default function RootLayout({
 							<ToastProvider>
 								{children}
 								<AdminLoginModal />
+								<InactivityWarningModal />
 								<ChatbotDrawer />
 							</ToastProvider>
 						</LiveDataProvider>
