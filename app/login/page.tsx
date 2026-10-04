@@ -465,24 +465,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {debugOtp && (
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-[11px]">Verification Code:</span>
-                    <button
-                      type="button"
-                      onClick={() => setOtp(debugOtp)}
-                      className="font-mono font-bold text-sm tracking-widest text-rose-600 dark:text-rose-400 hover:underline"
-                    >
-                      {debugOtp} (Click to auto-fill)
-                    </button>
-                  </div>
-                  <p className="text-[10px] opacity-80 leading-normal">
-                    Notice: Render Free Tier blocks outbound SMTP ports (587/465). Click the code above to auto-fill.
-                  </p>
-                </div>
-              )}
-
               <div className="pt-2 space-y-3">
                 <button
                   type="submit"
